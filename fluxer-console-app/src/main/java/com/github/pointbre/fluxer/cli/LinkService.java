@@ -13,7 +13,7 @@ import reactor.core.publisher.Mono;
 
 @Service
 public class LinkService {
-	private Link link;
+	private Link link = new TcpServerLink();
 	Disposable linkStatusSubscription;
 	Disposable inboundMessageSubscription;
 	
@@ -28,25 +28,67 @@ public class LinkService {
 		return link.stop();
 	}
 	
-    @PostConstruct
-    public void afterPropertiesSet() throws Exception {
-        System.out.println("LinkService PostConstruct");
-		link = new TcpServerLink();
-		linkStatusSubscription = link.getLinkStatusStream().subscribe(s -> System.out.println("Status changed: " + s));
-		inboundMessageSubscription = link.getInboundMessageStream().subscribe(m -> System.out.println("Message received: " + m));
-
-    }
-
-    @PreDestroy
-    public void destroy() throws Exception {
-    	System.out.println("LinkService PreDestroy");
+	public Mono<Void> initialize() {
+		link.initialize().then().doFinally(signal -> {
+			System.out.println("link initialized");
+			System.out.println("subscribing to streams");
+			linkStatusSubscription = link.getLinkStatusStream().subscribe(s -> System.out.println("Status changed: " + s));
+			inboundMessageSubscription = link.getInboundMessageStream().subscribe(m -> System.out.println("Message received: " + m));
+		}).subscribe(__ -> {}, ex -> {});
+		
+		return Mono.<Void>empty();
+	}
+	
+	public Mono<Void> destroy() {
+    	link.destroy().then().doFinally(signal -> {
+    		System.out.println("link destroyed");
+    		
+    		System.out.println("disposing subscriptions to streams");
+        	if (linkStatusSubscription != null) {
+        		linkStatusSubscription.dispose();
+        		linkStatusSubscription = null;
+        	}
+        	if (inboundMessageSubscription != null) {
+        		inboundMessageSubscription.dispose();
+        		inboundMessageSubscription = null;
+        	}
+    	}).subscribe(__ -> {}, ex -> {});
     	
-    	if (linkStatusSubscription != null) {
-    		linkStatusSubscription.dispose();
-    	}
-    	if (inboundMessageSubscription != null) {
-    		inboundMessageSubscription.dispose();
-    	}
-        System.out.println("LinkService destroyed");
-    }
+    	return Mono.<Void>empty();
+	}
+	
+//    @PostConstruct
+//    public void postConstruct() throws Exception {
+//        System.out.println("LinkService PostConstruct-start");
+//        
+//		link.initialize().then().doFinally(signal -> {
+//			System.out.println("link initialized");
+//			System.out.println("subscribing to streams");
+//			linkStatusSubscription = link.getLinkStatusStream().subscribe(s -> System.out.println("Status changed: " + s));
+//			inboundMessageSubscription = link.getInboundMessageStream().subscribe(m -> System.out.println("Message received: " + m));
+//		}).subscribe(__ -> {}, ex -> {});
+//
+//		System.out.println("LinkService PostConstruct-end");
+//    }
+
+//    @PreDestroy
+//    public void preDestroy() throws Exception {
+//    	System.out.println("LinkService PreDestroy-start");
+//    	
+//    	link.destroy().then().doFinally(signal -> {
+//    		System.out.println("link destroyed");
+//    		
+//    		System.out.println("disposing subscriptions to streams");
+//        	if (linkStatusSubscription != null) {
+//        		linkStatusSubscription.dispose();
+//        		linkStatusSubscription = null;
+//        	}
+//        	if (inboundMessageSubscription != null) {
+//        		inboundMessageSubscription.dispose();
+//        		inboundMessageSubscription = null;
+//        	}
+//    	}).subscribe(__ -> {}, ex -> {});
+//    	
+//        System.out.println("LinkService PreDestroy-end");
+//    }
 }

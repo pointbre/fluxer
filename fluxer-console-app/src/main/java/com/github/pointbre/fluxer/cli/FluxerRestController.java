@@ -25,4 +25,14 @@ public class FluxerRestController {
 	public Mono<Void> stop() {
 		return linkService.stop();
 	}
+	
+	@GetMapping("/fluxer/initialize")
+	public Mono<Void> initialize() {
+		return linkService.initialize();
+	}
+	
+	@GetMapping("/fluxer/destroy")
+	public Mono<Void> destroy() {
+		return linkService.destroy();
+	}
 }
