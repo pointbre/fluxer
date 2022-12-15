@@ -29,8 +29,6 @@ public class TcpServerLink implements Link {
 	private int port = 8421;
 	private boolean logging = false;
 
-	// start and stop --> stream
-
 	private DisposableServer disposableServer;
 	private TcpServer tcpServer;
 	private EventExecutor executor;
