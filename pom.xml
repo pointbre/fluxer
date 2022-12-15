@@ -18,7 +18,7 @@
 	<modules>
 		<module>fluxer-core</module>
 		<module>fluxer-api</module>
-		<module>fluxer-console-app</module>
+		<module>fluxer-cli</module>
 	</modules>
 
 	<properties>

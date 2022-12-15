@@ -1,4 +1,4 @@
-package com.github.pointbre.core;
+package com.github.pointbre.fluxer.core;
 
 public enum Status {
     // Server: Just created or shutdown finished
