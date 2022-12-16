@@ -8,6 +8,7 @@ import com.github.pointbre.fluxer.core.TcpServerLink;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 
+
 @Service
 public class LinkService {
 	private Link link = new TcpServerLink();
@@ -18,8 +19,8 @@ public class LinkService {
 		link.initialize().then().doFinally(signal -> {
 			System.out.println("link initialized");
 			System.out.println("subscribing to streams");
-			linkStatusSubscription = link.getLinkStatusStream().subscribe(s -> System.out.println("Status changed: " + s));
-			inboundMessageSubscription = link.getInboundMessageStream().subscribe(m -> System.out.println("Message received: " + m));
+			linkStatusSubscription = link.monitor().subscribe(s -> System.out.println("Status changed: " + s));
+			inboundMessageSubscription = link.read().subscribe(m -> System.out.println("Message received: " + m));
 		}).subscribe(x -> {}, ex -> {});
 		
 		return Mono.<Void>empty();
@@ -50,4 +51,10 @@ public class LinkService {
 	public Mono<Void> stop() {
 		return link.stop();
 	}
+
+	public Mono<Void> write(byte[] message) {
+		return link.write(message);
+	}
+	
+	
 }

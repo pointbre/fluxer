@@ -1,5 +1,7 @@
 package com.github.pointbre.fluxer.cli;
 
+import java.time.LocalTime;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,6 +18,7 @@ public class FluxerRestController {
 		this.linkService = linkService;
 	}
 	
+	// dto object for host, port, options...
 	@GetMapping("/fluxer/initialize")
 	public Mono<Void> initialize() {
 		return linkService.initialize();
@@ -34,5 +37,10 @@ public class FluxerRestController {
 	@GetMapping("/fluxer/stop")
 	public Mono<Void> stop() {
 		return linkService.stop();
+	}
+	
+	@GetMapping("/fluxer/write")
+	public Mono<Void> write() {
+		return linkService.write(LocalTime.now().toString().getBytes());
 	}
 }

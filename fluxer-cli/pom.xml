@@ -7,14 +7,14 @@
 		<version>1.0-SNAPSHOT</version>
 	</parent>
 
-	<artifactId>fluxer-console-app</artifactId>
-	<name>fluxer-console-app</name>
+	<artifactId>fluxer-cli</artifactId>
+	<name>fluxer-cli</name>
 	<packaging>jar</packaging>
 
 	<dependencies>
 		<dependency>
 			<groupId>com.github.pointbre</groupId>
-			<artifactId>fluxer-api</artifactId>
+			<artifactId>fluxer-core</artifactId>
 			<version>1.0-SNAPSHOT</version>
 		</dependency>
 
@@ -89,12 +89,12 @@
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
-
+<!--
 		<dependency>
 			<groupId>org.springframework.shell</groupId>
 			<artifactId>spring-shell-starter</artifactId>
 		</dependency>
-
+-->
 		<dependency>
 			<groupId>org.apache.logging.log4j</groupId>
 			<artifactId>log4j-api</artifactId>
