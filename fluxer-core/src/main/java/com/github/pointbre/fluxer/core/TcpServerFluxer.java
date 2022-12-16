@@ -11,6 +11,7 @@ import io.netty.channel.group.ChannelGroupFutureListener;
 import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.util.concurrent.DefaultEventExecutor;
 import io.netty.util.concurrent.EventExecutor;
+import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -22,8 +23,8 @@ import reactor.netty.NettyInbound;
 import reactor.netty.NettyOutbound;
 import reactor.netty.tcp.TcpServer;
 
-public class TcpServerLink implements Link {
-	// TODO Use builder pattern
+@Slf4j
+public class TcpServerFluxer implements Fluxer {
 
 	private String host = "localhost";
 	private int port = 8421;
@@ -38,30 +39,84 @@ public class TcpServerLink implements Link {
 	private Flux<Status> linkStatusFlux;
 	private Many<byte[]> linkInboundSink;
 	private Flux<byte[]> linkInboundFlux;
+	
+	private TcpServerFluxer() {
+	}
+	
+	public String host() {
+		return host;
+	}
+
+	public int port() {
+		return port;
+	}
+
+	public boolean logging() {
+		return logging;
+	}
+	
+	public static Builder builder() {
+		return new TcpServerFluxer().new Builder();
+	}
+	
+	public class Builder {
+		private Builder() {
+		}
+		
+		public Builder host(String host) {
+			TcpServerFluxer.this.host = host;
+			return this;
+		}
+		
+		public Builder port(int port) {
+			TcpServerFluxer.this.port = port;
+			return this;
+		}
+		
+		public Builder logging(boolean logging) {
+			TcpServerFluxer.this.logging = logging;
+			return this;
+		}
+		
+		public TcpServerFluxer build() {
+			return TcpServerFluxer.this;
+		}
+	}
 
 	@Override
 	public Mono<Void> initialize() {
+		Sinks.One<Void> sink = Sinks.one();
+		
+		linkStatusSink.tryEmitNext(Status.STOPPED);
+		
+		if (host == null || host.isBlank()) {
+			sink.tryEmitError(null);
+		}
+		if (port < 1024 || port > 65535) {
+			sink.tryEmitError(new IllegalArgumentException(host));
+		}
+		
 		executor = new DefaultEventExecutor();
 		group = new DefaultChannelGroup(executor);
 
 		tcpServer = TcpServer.create().doOnBind(tcpServerConfig -> {
-			System.out.println("server doOnBind " + tcpServerConfig);
+			log.debug("server doOnBind " + tcpServerConfig);
 			linkStatusSink.tryEmitNext(Status.STARTING);
 		}).doOnBound(disposableServer -> {
-			System.out.println("server doOnBound " + disposableServer);
+			log.debug("server doOnBound " + disposableServer);
 			linkStatusSink.tryEmitNext(Status.CONNECTING);
 		}).doOnConnection(tcpConnection -> {
-			System.out.println("server doOnConnection " + tcpConnection);
+			log.debug("server doOnConnection " + tcpConnection);
 
 			group.add(tcpConnection.channel());
-			System.out.println("New connection added:" + tcpConnection + ", currently " + group.size());
+			log.debug("New connection added:" + tcpConnection + ", currently " + group.size());
 
 			linkStatusSink.tryEmitNext(Status.CONNECTED);
 		}).doOnUnbound(disposableServer -> {
-			System.out.println("server doOnUnbound " + disposableServer);
+			log.debug("server doOnUnbound " + disposableServer);
 			linkStatusSink.tryEmitNext(Status.STOPPING);
 		}).doOnChannelInit((connectionObserver, channel, remoteAddress) -> {
-			System.out.println("server doOnChannelInit " + connectionObserver + "," + channel + "," + remoteAddress);
+			log.debug("server doOnChannelInit " + connectionObserver + "," + channel + "," + remoteAddress);
 		}).channelGroup(group).childObserve((tcpConnection, newState) -> {
 			// See ConnectionObserver.State
 			// If doOnConnection is set, this seems to affect childObserve too as the event
@@ -69,43 +124,44 @@ public class TcpServerLink implements Link {
 
 			// There must be a subscriber to inbound stream
 			// If not, disconnection event is not reported
-			System.out.println("childObserve:" + newState + ":" + tcpConnection);
+			log.debug("childObserve:" + newState + ":" + tcpConnection);
 			if (newState == ConnectionObserver.State.DISCONNECTING) {
-				System.out.println("server childObserve DISCONNECTING");
+				log.debug("server childObserve DISCONNECTING");
 				linkStatusSink.tryEmitNext(Status.STOPPING);
 			}
 		}).handle(new BiFunction<NettyInbound, NettyOutbound, Publisher<Void>>() {
 			@Override
 			public Publisher<Void> apply(NettyInbound in, NettyOutbound out) {
 				in.withConnection((tcpConnection) -> {
-					System.out.println("withConnection");
-					System.out.println(tcpConnection.channel().localAddress());
-					System.out.println(tcpConnection.channel().remoteAddress());
-				}).receive().asByteArray().doOnCancel(() -> System.out.println("in doOnCancel"))
-						.doOnComplete(() -> System.out.println("in doOnComplete")).doOnNext(buf -> {
+					log.debug("withConnection");
+					log.debug(tcpConnection.channel().localAddress().toString());
+					log.debug(tcpConnection.channel().remoteAddress().toString());
+				}).receive().asByteArray().doOnCancel(() -> log.debug("in doOnCancel"))
+						.doOnComplete(() -> log.debug("in doOnComplete")).doOnNext(buf -> {
 							linkInboundSink.tryEmitNext(buf);
-						}).doOnError(e -> System.out.println("in doOnError " + e))
-						.doOnSubscribe(s -> System.out.println("in doOnSubscribe " + s))
-						.doOnTerminate(() -> System.out.println("in doOnTerminate")).subscribe();
+						})
+						.doOnError(e -> log.debug("in doOnError " + e))
+						.doOnSubscribe(s -> log.debug("in doOnSubscribe " + s))
+						.doOnTerminate(() -> log.debug("in doOnTerminate")).subscribe();
 
-				return out.neverComplete().doOnTerminate(() -> System.out.println("out doOnTerminate"))
-						.doOnError(ex -> System.out.println("out doOnError: " + ex.getMessage()))
-						.doOnCancel(() -> System.out.println("out doOnCancel"));
+				return out.neverComplete().doOnTerminate(() -> log.debug("out doOnTerminate"))
+						.doOnError(ex -> log.debug("out doOnError: " + ex.getMessage()))
+						.doOnCancel(() -> log.debug("out doOnCancel"));
 			}
 		}).host(this.host).port(this.port).wiretap(this.logging).noSSL();
 
 		linkStatusSink = Sinks.many().multicast().<Status>onBackpressureBuffer();
 		linkStatusFlux = linkStatusSink.asFlux().publishOn(Schedulers.boundedElastic()).doOnSubscribe(sub -> {
-			System.out.println("A new LinkStatus subscriber! " + sub);
+			log.debug("A new LinkStatus subscriber! " + sub);
 		}).log();
 		linkInboundSink = Sinks.many().multicast().<byte[]>onBackpressureBuffer();
 		linkInboundFlux = linkInboundSink.asFlux().publishOn(Schedulers.boundedElastic()).doOnSubscribe(sub -> {
-			System.out.println("A new Inbound subscriber! " + sub);
+			log.debug("A new Inbound subscriber! " + sub);
 		}).log();
 
-		System.out.println("initialize() done");
+		log.debug("initialize() done");
 
-		return Mono.<Void>empty();
+		return sink.asMono();
 	}
 
 	@Override
@@ -113,31 +169,32 @@ public class TcpServerLink implements Link {
 		Sinks.One<Void> sink = Sinks.one();
 
 		stop().then().doFinally(signal -> {
-			System.out.println("doFinally triggered");
-			System.out.println("executor.shutdownGracefully()");
+			log.debug("doFinally triggered");
+			log.debug("executor.shutdownGracefully()");
 			if (executor != null) {
 				executor.shutdownGracefully();
 			}
-			System.out.println("group.close()");
+			log.debug("group.close()");
 			if (group != null) {
 				group.close();
 			}
-			System.out.println("linkStatusSink.tryEmitComplete()");
+			log.debug("linkStatusSink.tryEmitComplete()");
 			if (linkStatusSink != null) {
 				linkStatusSink.tryEmitComplete();
 			}
-			System.out.println("linkInboundSink.tryEmitComplete()");
+			log.debug("linkInboundSink.tryEmitComplete()");
 			if (linkInboundSink != null) {
 				linkInboundSink.tryEmitComplete();
 			}
 			sink.tryEmitEmpty();
 		}).subscribe(disposable -> {
-			System.out.println("stop() returned");
+			log.debug("stop() returned");
 		}, ex -> {
-			System.out.println("stop() error: " + ex.getMessage());
+			log.debug("stop() error: " + ex.getMessage());
 		});
 
-		System.out.println("destroy() done");
+		log.debug("destroy() done");
+		
 		return sink.asMono();
 	}
 
@@ -151,10 +208,10 @@ public class TcpServerLink implements Link {
 			tcpServer.bind().subscribe(disposableServer -> {
 				this.disposableServer = disposableServer;
 				sink.tryEmitEmpty();
-				System.out.println("server bind returned");
+				log.debug("server bind returned");
 			}, ex -> {
 				sink.tryEmitError(ex);
-				System.out.println("server bind error: " + ex.getMessage());
+				log.debug("server bind error: " + ex.getMessage());
 			});
 		}
 
@@ -171,7 +228,7 @@ public class TcpServerLink implements Link {
 			group.disconnect().addListener(new ChannelGroupFutureListener() {
 				@Override
 				public void operationComplete(ChannelGroupFuture future) throws Exception {
-					System.out.println("All connections are disconnected, so disposing server now");
+					log.debug("All connections are disconnected, so disposing server now");
 					disposableServer.dispose();
 				}
 			});
@@ -199,7 +256,7 @@ public class TcpServerLink implements Link {
 			group.writeAndFlush(Unpooled.wrappedBuffer(message)).addListener(new ChannelGroupFutureListener() {
 				@Override
 				public void operationComplete(ChannelGroupFuture future) throws Exception {
-					System.out.println("writing completed");
+					log.debug("writing completed");
 					sink.tryEmitEmpty();
 				}
 			});

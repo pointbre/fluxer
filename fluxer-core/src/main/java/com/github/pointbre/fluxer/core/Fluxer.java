@@ -3,7 +3,7 @@ package com.github.pointbre.fluxer.core;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-public interface Link {
+public interface Fluxer {
 	Mono<Void> initialize();
 	Mono<Void> destroy();
 	Mono<Void> start();
