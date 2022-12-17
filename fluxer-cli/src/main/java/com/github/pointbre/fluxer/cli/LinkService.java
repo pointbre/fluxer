@@ -10,6 +10,7 @@ import com.github.pointbre.fluxer.core.TcpServerFluxer;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 
 
 @Service
@@ -21,18 +22,32 @@ public class LinkService {
 	private Disposable inboundMessageSubscription;
 	
 	public Mono<Void> initialize() {
-		fluxer.initialize().then().doFinally(signal -> {
+		Sinks.One<Void> resultSink = Sinks.one();
+		
+		fluxer.initialize().then()
+		.doOnError(ex -> {
+			resultSink.tryEmitError(ex);
+		})
+		.doOnSuccess(__ -> {
 			log.debug("link initialized");
 			log.debug("subscribing to streams");
 			linkStatusSubscription = fluxer.monitor().subscribe(s -> log.debug("Status changed: " + s));
-			inboundMessageSubscription = fluxer.read().subscribe(m -> log.debug("Message received: " + m));
-		}).subscribe(x -> {}, ex -> {});
+			inboundMessageSubscription = fluxer.read().subscribe(m -> log.debug("Message received: " + m));			
+			resultSink.tryEmitEmpty();
+		})
+		.subscribe(x -> {}, ex -> {});
 		
-		return Mono.<Void>empty();
+		return resultSink.asMono();
 	}
 	
 	public Mono<Void> destroy() {
-    	fluxer.destroy().then().doFinally(signal -> {
+		Sinks.One<Void> resultSink = Sinks.one();
+		
+    	fluxer.destroy().then()
+    	.doOnError(ex -> {
+    		resultSink.tryEmitError(ex);
+    	})
+    	.doOnSuccess(__ -> {
     		log.debug("link destroyed");
     		
     		log.debug("disposing subscriptions to streams");
@@ -44,9 +59,11 @@ public class LinkService {
         		inboundMessageSubscription.dispose();
         		inboundMessageSubscription = null;
         	}
-    	}).subscribe(x -> {}, ex -> {});
+        	resultSink.tryEmitEmpty();
+    	})
+    	.subscribe(x -> {}, ex -> {});
     	
-    	return Mono.<Void>empty();
+    	return resultSink.asMono();
 	}
 	
 	public Mono<Void> start() {

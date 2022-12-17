@@ -23,10 +23,13 @@ import reactor.netty.NettyInbound;
 import reactor.netty.NettyOutbound;
 import reactor.netty.tcp.TcpServer;
 
+// TODO Custom Exceptions
+// TODO Java Module
+
 @Slf4j
 public class TcpServerFluxer implements Fluxer {
 
-	private String host = "localhost";
+	private String host = "";
 	private int port = 8421;
 	private boolean logging = false;
 
@@ -82,19 +85,34 @@ public class TcpServerFluxer implements Fluxer {
 			return TcpServerFluxer.this;
 		}
 	}
+	
+
 
 	@Override
 	public Mono<Void> initialize() {
-		Sinks.One<Void> sink = Sinks.one();
-		
-		linkStatusSink.tryEmitNext(Status.STOPPED);
+		Sinks.One<Void> resultSink = Sinks.one();
 		
 		if (host == null || host.isBlank()) {
-			sink.tryEmitError(null);
+			resultSink.tryEmitError(new IllegalArgumentException("Invalid host: " + host));
+			return resultSink.asMono();
 		}
-		if (port < 1024 || port > 65535) {
-			sink.tryEmitError(new IllegalArgumentException(host));
+		// Not valid ip address
+		else if (port < 1024 || port > 65535) {
+			resultSink.tryEmitError(new IllegalArgumentException("Invalid port number: " + port));
+			return resultSink.asMono();
 		}
+		// Port already open error
+		
+		linkStatusSink = Sinks.many().multicast().<Status>onBackpressureBuffer();
+		linkStatusFlux = linkStatusSink.asFlux().publishOn(Schedulers.boundedElastic()).doOnSubscribe(sub -> {
+			log.debug("A new LinkStatus subscriber! " + sub);
+		}).log();
+		linkInboundSink = Sinks.many().multicast().<byte[]>onBackpressureBuffer();
+		linkInboundFlux = linkInboundSink.asFlux().publishOn(Schedulers.boundedElastic()).doOnSubscribe(sub -> {
+			log.debug("A new Inbound subscriber! " + sub);
+		}).log();
+		
+		linkStatusSink.tryEmitNext(Status.STOPPED);
 		
 		executor = new DefaultEventExecutor();
 		group = new DefaultChannelGroup(executor);
@@ -150,24 +168,19 @@ public class TcpServerFluxer implements Fluxer {
 			}
 		}).host(this.host).port(this.port).wiretap(this.logging).noSSL();
 
-		linkStatusSink = Sinks.many().multicast().<Status>onBackpressureBuffer();
-		linkStatusFlux = linkStatusSink.asFlux().publishOn(Schedulers.boundedElastic()).doOnSubscribe(sub -> {
-			log.debug("A new LinkStatus subscriber! " + sub);
-		}).log();
-		linkInboundSink = Sinks.many().multicast().<byte[]>onBackpressureBuffer();
-		linkInboundFlux = linkInboundSink.asFlux().publishOn(Schedulers.boundedElastic()).doOnSubscribe(sub -> {
-			log.debug("A new Inbound subscriber! " + sub);
-		}).log();
+		resultSink.tryEmitEmpty();
 
 		log.debug("initialize() done");
 
-		return sink.asMono();
+		return resultSink.asMono();
 	}
 
 	@Override
 	public Mono<Void> destroy() {
-		Sinks.One<Void> sink = Sinks.one();
+		Sinks.One<Void> resultSink = Sinks.one();
 
+		// do on error
+		// do on success
 		stop().then().doFinally(signal -> {
 			log.debug("doFinally triggered");
 			log.debug("executor.shutdownGracefully()");
@@ -186,41 +199,45 @@ public class TcpServerFluxer implements Fluxer {
 			if (linkInboundSink != null) {
 				linkInboundSink.tryEmitComplete();
 			}
-			sink.tryEmitEmpty();
+			resultSink.tryEmitEmpty();
 		}).subscribe(disposable -> {
 			log.debug("stop() returned");
 		}, ex -> {
 			log.debug("stop() error: " + ex.getMessage());
 		});
 
+		resultSink.tryEmitEmpty();
+		
 		log.debug("destroy() done");
 		
-		return sink.asMono();
+		return resultSink.asMono();
 	}
 
 	@Override
 	public Mono<Void> start() {
-		Sinks.One<Void> sink = Sinks.one();
+		Sinks.One<Void> resultSink = Sinks.one();
 
 		if (tcpServer == null) {
-			sink.tryEmitEmpty();
+			// This is an error
+			resultSink.tryEmitEmpty();
 		} else {
 			tcpServer.bind().subscribe(disposableServer -> {
 				this.disposableServer = disposableServer;
-				sink.tryEmitEmpty();
+				resultSink.tryEmitEmpty();
 				log.debug("server bind returned");
 			}, ex -> {
-				sink.tryEmitError(ex);
+				resultSink.tryEmitError(ex);
 				log.debug("server bind error: " + ex.getMessage());
 			});
 		}
 
-		return sink.asMono();
+		return resultSink.asMono();
 	}
 
 	@Override
 	public Mono<Void> stop() {
 		if (disposableServer == null) {
+			// This is an error
 			return Mono.<Void>empty();
 		}
 
