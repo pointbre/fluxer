@@ -21,15 +21,6 @@ public class FluxerRestController {
 	}
 	
 	// dto object for host, port, options...
-	@GetMapping("/fluxer/initialize")
-	public Mono<Void> initialize() {
-		return linkService.initialize();
-	}
-	
-	@GetMapping("/fluxer/destroy")
-	public Mono<Void> destroy() {
-		return linkService.destroy();
-	}
 
 	@GetMapping("/fluxer/start")
 	public Mono<Void> start() {

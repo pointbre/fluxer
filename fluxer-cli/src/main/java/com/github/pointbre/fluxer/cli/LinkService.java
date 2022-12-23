@@ -20,11 +20,11 @@ public class LinkService {
 	private Fluxer fluxer = TcpServerFluxer.builder().build();
 	private Disposable linkStatusSubscription;
 	private Disposable inboundMessageSubscription;
-	
-	public Mono<Void> initialize() {
+		
+	public Mono<Void> start() {
 		Sinks.One<Void> resultSink = Sinks.one();
 		
-		fluxer.initialize().then()
+		fluxer.start().then()
 		.doOnError(ex -> {
 			resultSink.tryEmitError(ex);
 		})
@@ -39,11 +39,11 @@ public class LinkService {
 		
 		return resultSink.asMono();
 	}
-	
-	public Mono<Void> destroy() {
+
+	public Mono<Void> stop() {
 		Sinks.One<Void> resultSink = Sinks.one();
 		
-    	fluxer.destroy().then()
+    	fluxer.stop().then()
     	.doOnError(ex -> {
     		resultSink.tryEmitError(ex);
     	})
@@ -64,14 +64,6 @@ public class LinkService {
     	.subscribe(x -> {}, ex -> {});
     	
     	return resultSink.asMono();
-	}
-	
-	public Mono<Void> start() {
-		return fluxer.start();
-	}
-
-	public Mono<Void> stop() {
-		return fluxer.stop();
 	}
 
 	public Mono<Void> write(byte[] message) {

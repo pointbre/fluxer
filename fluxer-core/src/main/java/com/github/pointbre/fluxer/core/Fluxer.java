@@ -4,8 +4,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 public interface Fluxer {
-	Mono<Void> initialize();
-	Mono<Void> destroy();
 	Mono<Void> start();
     Mono<Void> stop();
     

@@ -23,18 +23,20 @@ import reactor.netty.NettyInbound;
 import reactor.netty.NettyOutbound;
 import reactor.netty.tcp.TcpServer;
 
+// TODO Start, Stop would be enough
 // TODO Custom Exceptions
 // TODO Java Module
+// TODO Spring Boot Rest API -> Library
 
 @Slf4j
 public class TcpServerFluxer implements Fluxer {
 
-	private String host = "";
+	private String host = "localhost";
 	private int port = 8421;
 	private boolean logging = false;
 
-	private DisposableServer disposableServer;
 	private TcpServer tcpServer;
+	private DisposableServer disposableServer;
 	private EventExecutor executor;
 	private ChannelGroup group;
 
@@ -42,10 +44,10 @@ public class TcpServerFluxer implements Fluxer {
 	private Flux<Status> linkStatusFlux;
 	private Many<byte[]> linkInboundSink;
 	private Flux<byte[]> linkInboundFlux;
-	
+
 	private TcpServerFluxer() {
 	}
-	
+
 	public String host() {
 		return host;
 	}
@@ -57,63 +59,63 @@ public class TcpServerFluxer implements Fluxer {
 	public boolean logging() {
 		return logging;
 	}
-	
+
 	public static Builder builder() {
 		return new TcpServerFluxer().new Builder();
 	}
-	
+
 	public class Builder {
 		private Builder() {
 		}
-		
+
 		public Builder host(String host) {
 			TcpServerFluxer.this.host = host;
 			return this;
 		}
-		
+
 		public Builder port(int port) {
 			TcpServerFluxer.this.port = port;
 			return this;
 		}
-		
+
 		public Builder logging(boolean logging) {
 			TcpServerFluxer.this.logging = logging;
 			return this;
 		}
-		
+
 		public TcpServerFluxer build() {
 			return TcpServerFluxer.this;
 		}
 	}
-	
-
 
 	@Override
-	public Mono<Void> initialize() {
+	public Mono<Void> start() {
+
 		Sinks.One<Void> resultSink = Sinks.one();
-		
+
+		// Null or blank
 		if (host == null || host.isBlank()) {
-			resultSink.tryEmitError(new IllegalArgumentException("Invalid host: " + host));
+			resultSink.tryEmitError(new FluxerException("Invalid host: " + host));
 			return resultSink.asMono();
 		}
-		// Not valid ip address
-		else if (port < 1024 || port > 65535) {
-			resultSink.tryEmitError(new IllegalArgumentException("Invalid port number: " + port));
-			return resultSink.asMono();
-		}
-		// Port already open error
 		
+		// Not valid ip address
+		if (port < 1024 || port > 65535) {
+			resultSink.tryEmitError(new FluxerException("Invalid port number: " + port));
+			return resultSink.asMono();
+		}
+
 		linkStatusSink = Sinks.many().multicast().<Status>onBackpressureBuffer();
 		linkStatusFlux = linkStatusSink.asFlux().publishOn(Schedulers.boundedElastic()).doOnSubscribe(sub -> {
 			log.debug("A new LinkStatus subscriber! " + sub);
 		}).log();
+		linkStatusSink.tryEmitNext(Status.STOPPED);
+
 		linkInboundSink = Sinks.many().multicast().<byte[]>onBackpressureBuffer();
 		linkInboundFlux = linkInboundSink.asFlux().publishOn(Schedulers.boundedElastic()).doOnSubscribe(sub -> {
 			log.debug("A new Inbound subscriber! " + sub);
 		}).log();
-		
-		linkStatusSink.tryEmitNext(Status.STOPPED);
-		
+
 		executor = new DefaultEventExecutor();
 		group = new DefaultChannelGroup(executor);
 
@@ -123,11 +125,11 @@ public class TcpServerFluxer implements Fluxer {
 		}).doOnBound(disposableServer -> {
 			log.debug("server doOnBound " + disposableServer);
 			linkStatusSink.tryEmitNext(Status.CONNECTING);
-		}).doOnConnection(tcpConnection -> {
-			log.debug("server doOnConnection " + tcpConnection);
+		}).doOnConnection(connection -> {
+			log.debug("server doOnConnection " + connection);
 
-			group.add(tcpConnection.channel());
-			log.debug("New connection added:" + tcpConnection + ", currently " + group.size());
+			group.add(connection.channel());
+			log.debug("New connection added:" + connection + ", currently " + group.size());
 
 			linkStatusSink.tryEmitNext(Status.CONNECTED);
 		}).doOnUnbound(disposableServer -> {
@@ -157,8 +159,7 @@ public class TcpServerFluxer implements Fluxer {
 				}).receive().asByteArray().doOnCancel(() -> log.debug("in doOnCancel"))
 						.doOnComplete(() -> log.debug("in doOnComplete")).doOnNext(buf -> {
 							linkInboundSink.tryEmitNext(buf);
-						})
-						.doOnError(e -> log.debug("in doOnError " + e))
+						}).doOnError(e -> log.debug("in doOnError " + e))
 						.doOnSubscribe(s -> log.debug("in doOnSubscribe " + s))
 						.doOnTerminate(() -> log.debug("in doOnTerminate")).subscribe();
 
@@ -168,74 +169,21 @@ public class TcpServerFluxer implements Fluxer {
 			}
 		}).host(this.host).port(this.port).wiretap(this.logging).noSSL();
 
-		resultSink.tryEmitEmpty();
-
-		log.debug("initialize() done");
-
-		return resultSink.asMono();
-	}
-
-	@Override
-	public Mono<Void> destroy() {
-		Sinks.One<Void> resultSink = Sinks.one();
-
-		// do on error
-		// do on success
-		stop().then().doFinally(signal -> {
-			log.debug("doFinally triggered");
-			log.debug("executor.shutdownGracefully()");
-			if (executor != null) {
-				executor.shutdownGracefully();
-			}
-			log.debug("group.close()");
-			if (group != null) {
-				group.close();
-			}
-			log.debug("linkStatusSink.tryEmitComplete()");
-			if (linkStatusSink != null) {
-				linkStatusSink.tryEmitComplete();
-			}
-			log.debug("linkInboundSink.tryEmitComplete()");
-			if (linkInboundSink != null) {
-				linkInboundSink.tryEmitComplete();
-			}
+		tcpServer.bind().subscribe(disposableServer -> {
+			this.disposableServer = disposableServer;
 			resultSink.tryEmitEmpty();
-		}).subscribe(disposable -> {
-			log.debug("stop() returned");
+			log.debug("server bind returned");
 		}, ex -> {
-			log.debug("stop() error: " + ex.getMessage());
+			resultSink.tryEmitError(ex);
+			log.debug("server bind error: " + ex.getMessage());
 		});
-
-		resultSink.tryEmitEmpty();
-		
-		log.debug("destroy() done");
-		
-		return resultSink.asMono();
-	}
-
-	@Override
-	public Mono<Void> start() {
-		Sinks.One<Void> resultSink = Sinks.one();
-
-		if (tcpServer == null) {
-			// This is an error
-			resultSink.tryEmitEmpty();
-		} else {
-			tcpServer.bind().subscribe(disposableServer -> {
-				this.disposableServer = disposableServer;
-				resultSink.tryEmitEmpty();
-				log.debug("server bind returned");
-			}, ex -> {
-				resultSink.tryEmitError(ex);
-				log.debug("server bind error: " + ex.getMessage());
-			});
-		}
 
 		return resultSink.asMono();
 	}
 
 	@Override
 	public Mono<Void> stop() {
+
 		if (disposableServer == null) {
 			// This is an error
 			return Mono.<Void>empty();
@@ -247,6 +195,22 @@ public class TcpServerFluxer implements Fluxer {
 				public void operationComplete(ChannelGroupFuture future) throws Exception {
 					log.debug("All connections are disconnected, so disposing server now");
 					disposableServer.dispose();
+
+					if (executor != null) {
+						executor.shutdownGracefully();
+					}
+					log.debug("group.close()");
+					if (group != null) {
+						group.close();
+					}
+					log.debug("linkStatusSink.tryEmitComplete()");
+					if (linkStatusSink != null) {
+						linkStatusSink.tryEmitComplete();
+					}
+					log.debug("linkInboundSink.tryEmitComplete()");
+					if (linkInboundSink != null) {
+						linkInboundSink.tryEmitComplete();
+					}
 				}
 			});
 		}
