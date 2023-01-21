@@ -1,49 +1,37 @@
 package com.github.pointbre.fluxer.cli;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
-import com.github.pointbre.fluxer.core.SingleFluxer;
 import com.github.pointbre.fluxer.core.TcpServerFluxer;
 
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.Disposable;
-import reactor.core.publisher.Mono;
-import reactor.core.publisher.Sinks;
 
-@Service
 @Slf4j
-public class LinkService {
-
-    private SingleFluxer fluxer = TcpServerFluxer.builder().build();
+//@Service
+public class TcpServerService {
+    private TcpServerFluxer fluxer;
     private Disposable linkStatusSubscription;
     private Disposable inboundMessageSubscription;
 
-    public Mono<Void> start() {
-	Sinks.One<Void> resultSink = Sinks.one();
+    public TcpServerService() {
+	fluxer = TcpServerFluxer.builder().host("localhost").port(8421).logging(true).build();
+    }
 
+//    @PostConstruct
+    public void init() {
 	fluxer.start().then().doOnError(ex -> {
-	    resultSink.tryEmitError(ex);
 	}).doOnSuccess(__ -> {
-	    log.debug("link initialized");
 	    log.debug("subscribing to streams");
 	    linkStatusSubscription = fluxer.status().subscribe(s -> log.debug("Status changed: " + s));
 	    inboundMessageSubscription = fluxer.read().subscribe(m -> log.debug("Message received: " + m));
-	    resultSink.tryEmitEmpty();
+	}).doFinally(__ -> {
 	}).subscribe(x -> {
 	}, ex -> {
 	});
-
-	return resultSink.asMono();
     }
 
-    public Mono<Void> stop() {
-	Sinks.One<Void> resultSink = Sinks.one();
-
-	fluxer.stop().then().doOnError(ex -> {
-	    resultSink.tryEmitError(ex);
-	}).doOnSuccess(__ -> {
+//    @PreDestroy
+    public void destory() {
+	fluxer.stop().then().doFinally(__ -> {
 	    log.debug("link destroyed");
 
 	    log.debug("disposing subscriptions to streams");
@@ -55,15 +43,9 @@ public class LinkService {
 		inboundMessageSubscription.dispose();
 		inboundMessageSubscription = null;
 	    }
-	    resultSink.tryEmitEmpty();
 	}).subscribe(x -> {
 	}, ex -> {
 	});
-
-	return resultSink.asMono();
     }
 
-    public Mono<Void> write(byte[] message) {
-	return fluxer.write(message);
-    }
 }
