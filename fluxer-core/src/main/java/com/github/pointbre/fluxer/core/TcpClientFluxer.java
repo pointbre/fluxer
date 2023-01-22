@@ -23,7 +23,7 @@ import reactor.netty.NettyOutbound;
 import reactor.netty.tcp.TcpClient;
 
 @Slf4j
-public class TcpClientFluxer implements SingleFluxer {
+public class TcpClientFluxer implements SingleLinkFluxer {
 
     private String host = "localhost";
     private int port = 8421;

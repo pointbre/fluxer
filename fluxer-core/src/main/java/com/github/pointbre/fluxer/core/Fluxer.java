@@ -1,6 +1,7 @@
 package com.github.pointbre.fluxer.core;
 
-import java.util.List;
+import com.github.pointbre.fluxer.core.Fluxer.Link;
+import com.github.pointbre.fluxer.core.Fluxer.Message;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -11,86 +12,97 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 public interface Fluxer {
+
+	Mono<Void> start();
+
+	Mono<Void> stop();
+
+	Flux<Status> status();
+
+	Flux<Link> link();
+	
+    Flux<Message> read();
     
-    Mono<Void> start();
-
-    Mono<Void> stop();
-
-    Flux<Status> status();
-
-    public enum Status {
-	
-	STARTING, STARTED, STOPPING, STOPPED;
-	
-    }
-
-    @Value
-    @AllArgsConstructor
-    @Getter
-    @ToString
-    public class Link {
-	
-	@NonNull
-	private String localIPAddress;
-	@NonNull
-	private Integer localPort;
-	@NonNull
-	private String remoteIPAddress;
-	@NonNull
-	private Integer remotePort;
-	@NonNull
-	private Status status;
+    Mono<Void> write(Message message);
 
 	public enum Status {
 
-	    CONNECTING, CONNECTED, DISCONNECTING, DISCONNECTED;
+		STARTING, STARTED, STOPPING, STOPPED;
 
 	}
-    }
 
-    @Value
-    @AllArgsConstructor
-    @Getter
-    @ToString
-    public class Message {
+	@Value
+	@AllArgsConstructor
+	@Getter
+	@ToString
+	public class Link {
 
-	@NonNull
-	private Link connection;
-	@NonNull
-	private byte[] message;
+		@NonNull
+		private String localIPAddress;
 
-    }
+		@NonNull
+		private Integer localPort;
 
-    public class FluxerException extends Exception {
+		@NonNull
+		private String remoteIPAddress;
 
-	public FluxerException(String message) {
-	    super(message);
+		@NonNull
+		private Integer remotePort;
+
+		@NonNull
+		private Status status;
+
+		public enum Status {
+
+			CONNECTED, DISCONNECTED;
+
+		}
 	}
 
-    }
+	@Value
+	@AllArgsConstructor
+	@Getter
+	@ToString
+	public class Message {
 
-    public class StartException extends FluxerException {
+		@NonNull
+		private Link link;
 
-	public StartException(String message) {
-	    super(message);
+		@NonNull
+		private byte[] message;
+
 	}
-	
-    }
 
-    public class StopException extends FluxerException {
+	public class FluxerException extends Exception {
 
-	public StopException(String message) {
-	    super(message);
+		public FluxerException(String message) {
+			super(message);
+		}
+
 	}
-	
-    }
 
-    public class WriteException extends FluxerException {
+	public class StartException extends FluxerException {
 
-	public WriteException(String message) {
-	    super(message);
+		public StartException(String message) {
+			super(message);
+		}
+
 	}
-	
-    }
-    
+
+	public class StopException extends FluxerException {
+
+		public StopException(String message) {
+			super(message);
+		}
+
+	}
+
+	public class WriteException extends FluxerException {
+
+		public WriteException(String message) {
+			super(message);
+		}
+
+	}
+
 }

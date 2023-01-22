@@ -4,7 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import com.github.pointbre.fluxer.core.SingleFluxer;
+import com.github.pointbre.fluxer.core.SingleLinkFluxer;
 import com.github.pointbre.fluxer.core.TcpServerFluxer;
 
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +16,7 @@ import reactor.core.publisher.Sinks;
 @Slf4j
 public class LinkService {
 
-    private SingleFluxer fluxer = TcpServerFluxer.builder().build();
+    private SingleLinkFluxer fluxer = TcpServerFluxer.builder().build();
     private Disposable linkStatusSubscription;
     private Disposable inboundMessageSubscription;
 

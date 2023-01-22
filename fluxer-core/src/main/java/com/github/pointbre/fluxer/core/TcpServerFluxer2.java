@@ -29,7 +29,7 @@ import reactor.netty.tcp.TcpServer;
 // TODO Spring Boot Rest API -> Library
 
 @Slf4j
-public class TcpServerFluxer2 implements SingleFluxer {
+public class TcpServerFluxer2 implements SingleLinkFluxer {
 
     private String host = "localhost";
     private int port = 8421;
@@ -48,45 +48,6 @@ public class TcpServerFluxer2 implements SingleFluxer {
     private TcpServerFluxer2() {
     }
 
-    public String host() {
-	return host;
-    }
-
-    public int port() {
-	return port;
-    }
-
-    public boolean logging() {
-	return logging;
-    }
-
-    public static Builder builder() {
-	return new TcpServerFluxer2().new Builder();
-    }
-
-    public class Builder {
-	private Builder() {
-	}
-
-	public Builder host(String host) {
-	    TcpServerFluxer2.this.host = host;
-	    return this;
-	}
-
-	public Builder port(int port) {
-	    TcpServerFluxer2.this.port = port;
-	    return this;
-	}
-
-	public Builder logging(boolean logging) {
-	    TcpServerFluxer2.this.logging = logging;
-	    return this;
-	}
-
-	public TcpServerFluxer2 build() {
-	    return TcpServerFluxer2.this;
-	}
-    }
 
     @Override
     public Mono<Void> start() {
