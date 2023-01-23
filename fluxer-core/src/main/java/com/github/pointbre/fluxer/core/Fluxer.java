@@ -54,9 +54,10 @@ public interface Fluxer {
 
 		public enum Status {
 
-			CONNECTED, DISCONNECTED;
+			CONNECTED, DISCONNECTED, NONE;
 
 		}
+		
 	}
 
 	@Value

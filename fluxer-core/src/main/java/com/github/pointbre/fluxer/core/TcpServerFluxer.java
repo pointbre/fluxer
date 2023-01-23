@@ -1,17 +1,23 @@
 package com.github.pointbre.fluxer.core;
 
 import java.net.InetSocketAddress;
+import java.util.Iterator;
 import java.util.function.BiFunction;
 
 import org.reactivestreams.Publisher;
 
+import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.group.ChannelGroup;
 import io.netty.channel.group.ChannelGroupFuture;
 import io.netty.channel.group.ChannelGroupFutureListener;
 import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.util.concurrent.DefaultEventExecutor;
 import io.netty.util.concurrent.EventExecutor;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -111,7 +117,6 @@ public class TcpServerFluxer implements Fluxer {
 						log.debug("New connection added:" + connection + ", currently " + group.size());
 
 						emitLink(connection, Link.Status.CONNECTED);
-
 					})
 					.doOnUnbound(disposableServer -> {
 						log.debug("server doOnUnbound " + disposableServer);
@@ -174,9 +179,7 @@ public class TcpServerFluxer implements Fluxer {
 				public void operationComplete(ChannelGroupFuture future) throws Exception {
 
 					executor.shutdownGracefully();
-
 					group.close();
-
 					disposableServer.dispose();
 
 					emitStatus(Status.STOPPED);
@@ -208,53 +211,91 @@ public class TcpServerFluxer implements Fluxer {
 
 	@Override
 	public Mono<Void> write(Message message) {
-		Sinks.One<Void> sink = Sinks.one();
+		// If writing to multiple links needs to be allowed,
+		// - Change isSameLink() to support wildcard or regex or something else
+		// - Return a new future created from multiple ChannelFuture
+		// - See
+		// https://stackoverflow.com/questions/10503586/writing-to-all-but-one-in-a-tcp-netty-channelgroup
+		Sinks.One<Void> resultSink = Sinks.one();
 
-		// TODO: Write only to the given Link included in message
 		if (group != null) {
-			group.writeAndFlush(Unpooled.wrappedBuffer(message.getMessage()))
-					.addListener(new ChannelGroupFutureListener() {
-						@Override
-						public void operationComplete(ChannelGroupFuture future) throws Exception {
-							log.debug("writing completed");
-							sink.tryEmitEmpty();
-						}
-					});
+			Iterator<Channel> channelIterator = group.iterator();
+			boolean linkFound = false;
+			Channel channel = null;
+			while (channelIterator.hasNext()) {
+				channel = channelIterator.next();
+				if (isSameLink(channel, message.getLink())) {
+					linkFound = true;
+					break;
+				}
+			}
 
+			if (linkFound) {
+				channel.writeAndFlush(Unpooled.wrappedBuffer(message.getMessage()))
+						.addListener(new ChannelFutureListener() {
+
+							@Override
+							public void operationComplete(ChannelFuture future) throws Exception {
+								log.debug("writing to " + message.getLink() + " completed: "
+										+ ByteBufUtil.hexDump(message.getMessage()));
+								resultSink.tryEmitEmpty();
+							}
+						});
+			} else {
+				emitWriteException(resultSink, message.getLink() + " is not connected yet.");
+			}
 		}
 
-		return sink.asMono();
+		return resultSink.asMono();
 	}
 
 	private BiFunction<NettyInbound, NettyOutbound, Publisher<Void>> createHandler() {
 		return new BiFunction<NettyInbound, NettyOutbound, Publisher<Void>>() {
 			@Override
 			public Publisher<Void> apply(NettyInbound in, NettyOutbound out) {
-				in.withConnection((tcpConnection) -> {
+				in.withConnection(tcpConnection -> {
 					log.debug("withConnection");
 					log.debug(tcpConnection.channel().localAddress().toString());
 					log.debug(tcpConnection.channel().remoteAddress().toString());
-				}).receive().asByteArray().doOnCancel(() -> {
-					log.debug("in doOnCancel");
-				}).doOnComplete(() -> {
-					log.debug("in doOnComplete");
-				}).doOnNext(buf -> {
-					emitInbound(buf);
-				}).doOnError(e -> {
-					log.debug("in doOnError " + e);
-				}).doOnSubscribe(s -> {
-					log.debug("in doOnSubscribe " + s);
-				}).doOnTerminate(() -> {
-					log.debug("in doOnTerminate");
-				}).subscribe();
+				})
+						.receive()
+						.asByteArray()
+						.doOnCancel(() -> {
+							log.debug("in doOnCancel");
+						})
+						.doOnComplete(() -> {
+							log.debug("in doOnComplete");
+						})
+						.doOnNext(buf -> {
+							// TODO: Test if this works
+							in.withConnection(connection -> {
+								log.debug(ByteBufUtil.hexDump(buf) + " from " + connection + "???");
+								log.debug(connection.channel().localAddress().toString());
+								log.debug(connection.channel().remoteAddress().toString());
+								emitInbound(connection, buf);								
+							});
+						})
+						.doOnError(e -> {
+							log.debug("in doOnError " + e);
+						})
+						.doOnSubscribe(s -> {
+							log.debug("in doOnSubscribe " + s);
+						})
+						.doOnTerminate(() -> {
+							log.debug("in doOnTerminate");
+						})
+						.subscribe();
 
-				return out.neverComplete().doOnTerminate(() -> {
-					log.debug("out doOnTerminate");
-				}).doOnError(ex -> {
-					log.debug("out doOnError: " + ex.getMessage());
-				}).doOnCancel(() -> {
-					log.debug("out doOnCancel");
-				});
+				return out.neverComplete()
+						.doOnTerminate(() -> {
+							log.debug("out doOnTerminate");
+						})
+						.doOnError(ex -> {
+							log.debug("out doOnError: " + ex.getMessage());
+						})
+						.doOnCancel(() -> {
+							log.debug("out doOnCancel");
+						});
 			}
 		};
 	}
@@ -275,12 +316,21 @@ public class TcpServerFluxer implements Fluxer {
 		return true;
 	}
 
-	private void emitStatus(Status status) {
-		if (statusSink == null) {
-			statusSink = Sinks.many().multicast().<Status>onBackpressureBuffer();
+	private boolean isSameLink(Channel channel, @NonNull Link link) {
+		InetSocketAddress local = (InetSocketAddress) channel.localAddress();
+		InetSocketAddress remote = (InetSocketAddress) channel.remoteAddress();
+		if (link.getLocalIPAddress().equals(local.getAddress().getHostAddress()) &&
+				link.getLocalPort().equals(Integer.valueOf(local.getPort())) &&
+				link.getRemoteIPAddress().equals(remote.getAddress().getHostAddress()) &&
+				link.getRemotePort().equals(Integer.valueOf(remote.getPort()))) {
+			return true;
 		}
 
-		log.debug("Status updated: " + status.toString());
+		return false;
+	}
+
+	private void emitStatus(Status status) {
+		log.debug("status updated: " + status.toString());
 		statusSink.tryEmitNext(status);
 	}
 
@@ -289,16 +339,17 @@ public class TcpServerFluxer implements Fluxer {
 		InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
 		Link newLink = new Link(local.getAddress().getHostAddress(), local.getPort(),
 				remote.getAddress().getHostAddress(), remote.getPort(), status);
+		log.debug("link updated: " + newLink + " --> " + status.toString());
 		linkSink.tryEmitNext(newLink);
 	}
 
-	private void emitInbound(byte[] receivedMessage) {
-		if (inboundSink == null) {
-			inboundSink = Sinks.many().multicast().<byte[]>onBackpressureBuffer();
-		}
-
-		log.debug("Inbound updated: " + receivedMessage);
-		inboundSink.tryEmitNext(receivedMessage);
+	private void emitInbound(Connection connection, byte[] receivedMessage) {
+		InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
+		InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
+		Link newLink = new Link(local.getAddress().getHostAddress(), local.getPort(),
+				remote.getAddress().getHostAddress(), remote.getPort(), Link.Status.NONE);
+		log.debug("inbound updated: " + newLink + " --> " + ByteBufUtil.hexDump(receivedMessage));
+		inboundSink.tryEmitNext(new Message(newLink, receivedMessage));
 	}
 
 	private void emitStartException(Sinks.One<Void> resultSink, String errorMessage) {
