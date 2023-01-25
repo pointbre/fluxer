@@ -1,8 +1,5 @@
 package com.github.pointbre.fluxer.core;
 
-import com.github.pointbre.fluxer.core.Fluxer.Link;
-import com.github.pointbre.fluxer.core.Fluxer.Message;
-
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
@@ -30,6 +27,20 @@ public interface Fluxer {
 		STARTING, STARTED, STOPPING, STOPPED;
 
 	}
+	
+	@Value
+	@AllArgsConstructor
+	@Getter
+	@ToString
+	public class Endpoint {
+		
+		@NonNull
+		private String ipAddress;
+
+		@NonNull
+		private Integer port;
+		
+	}
 
 	@Value
 	@AllArgsConstructor
@@ -38,16 +49,10 @@ public interface Fluxer {
 	public class Link {
 
 		@NonNull
-		private String localIPAddress;
+		private Endpoint localEndpoint;
 
 		@NonNull
-		private Integer localPort;
-
-		@NonNull
-		private String remoteIPAddress;
-
-		@NonNull
-		private Integer remotePort;
+		private Endpoint remoteEndpoint;
 
 		@NonNull
 		private Status status;
