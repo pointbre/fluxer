@@ -30,7 +30,7 @@
     <log4j2.version>2.19.0</log4j2.version>
     <junit5.version>5.9.1</junit5.version>
     <mockito.version>4.9.0</mockito.version>
-    <reactor.version>2022.0.0</reactor.version>
+    <reactor.version>2022.0.2</reactor.version>
     <spring.boot.version>2.7.5</spring.boot.version>
     <spring.shell.version>2.1.4</spring.shell.version>
     <spring.doc.version>1.6.14</spring.doc.version>
