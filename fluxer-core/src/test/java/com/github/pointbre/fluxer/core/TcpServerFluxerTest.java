@@ -74,7 +74,4 @@ class TcpServerFluxerTest {
 				.expectComplete();
 
 	}
-
-	// See reactor's test section about step verifier and so on
-	// See reactor-netty's unit tests
 }
