@@ -1,9 +1,11 @@
-package com.github.pointbre.fluxer.core;
+package com.github.pointbre.fluxer.core.bdd;
 
 import static org.junit.jupiter.api.Assertions.fail;
 
 import java.util.concurrent.CountDownLatch;
 
+import com.github.pointbre.fluxer.core.Fluxer;
+import com.github.pointbre.fluxer.core.TcpServerFluxer;
 import com.github.pointbre.fluxer.util.TcpUtil;
 
 import io.cucumber.java.en.Given;
