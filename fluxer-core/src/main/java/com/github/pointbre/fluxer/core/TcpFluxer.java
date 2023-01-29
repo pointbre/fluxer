@@ -166,6 +166,14 @@ public abstract class TcpFluxer implements Fluxer {
 		return resultSink.asMono();
 	}
 	
+	public String getIpAddress() {
+		return ipAddress;
+	}
+
+	public Integer getPort() {
+		return port;
+	}
+	
 	protected void emitStatus(Status status) {
 		log.debug("status updated: " + status.toString());
 		statusSink.tryEmitNext(status);
