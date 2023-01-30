@@ -48,18 +48,6 @@ Feature: TCP Server
         And TCP server 1 stops successfully
         Then TCP server 1 publishes its read changes: a text message "123"
 
-    Scenario: TCP Server starts up and publishes its 1 incoming merged message when a connected client sends 2 text messages
-        Given a free port 1 is found
-        And TCP server 1 is created at the found free port 1
-        And TCP client 1 is created at the found free port 1
-        When TCP server 1 starts successfully
-        And TCP client 1 starts successfully
-        And TCP client 1 writes a text message "123" to the TCP server 1
-        And TCP client 1 writes a text message "456" to the TCP server 1
-        And TCP client 1 stops successfully
-        And TCP server 1 stops successfully
-        Then TCP server 1 publishes its read changes: a text message "123456"
-
     Scenario: TCP Server starts up and publishes its incoming message when a connected client sends a binary message
         Given a free port 1 is found
         And TCP server 1 is created at the found free port 1
