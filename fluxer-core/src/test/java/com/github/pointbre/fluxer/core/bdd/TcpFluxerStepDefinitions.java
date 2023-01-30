@@ -24,9 +24,10 @@ import io.netty.buffer.ByteBufUtil;
 import reactor.core.Disposable;
 import reactor.test.StepVerifier;
 
-public class TcpServerFluxerStepDefinitions {
+public class TcpFluxerStepDefinitions {
 	private static final int WAIT_TIMEOUT = 30;
 	private static final String HOST_TO_TEST = "127.0.0.1";
+	private static final String EMPTY_STRING = "";
 
 	private Integer portNumber1;
 
@@ -137,10 +138,20 @@ public class TcpServerFluxerStepDefinitions {
 			}
 		}
 	}
-
+	
 	@Given("a free port 1 is found")
 	public void a_free_port_1_is_found() {
 		portNumber1 = TcpUtil.findFreePort();
+	}
+
+	@Given("TCP server 1 is created on an empty string at the found free port 1")
+	public void tcp_server_1_is_created_on_an_empty_string_at_the_found_free_port_1() {
+		tcpServerFluxer1 = new TcpServerFluxer(EMPTY_STRING, portNumber1);
+	}
+
+	@Given("TCP client 1 is created on an empty string at the found free port 1")
+	public void tcp_client_is_created_on_an_empty_string_at_the_found_free_port_1() {
+		tcpClientFluxer1 = new TcpClientFluxer(EMPTY_STRING, portNumber1);
 	}
 
 	@Given("TCP server 1 is created at the found free port 1")
@@ -247,32 +258,8 @@ public class TcpServerFluxerStepDefinitions {
 		}
 	}
 
-	@When("TCP client 1 writes a text message {string} to the TCP server 1")
-	public void tcp_client_writes_a_text_message_to_the_tcp_server(String messageToSend) {
-		final CountDownLatch countDownLatch1 = new CountDownLatch(1);
-
-		Link targetLink = new Link(new Endpoint(HOST_TO_TEST, -1), new Endpoint(HOST_TO_TEST, portNumber1),
-				Link.Status.NONE);
-
-		tcpClientFluxer1.write(new Message(targetLink, messageToSend.getBytes()))
-				.doOnError(ex -> {
-					fail("TCP client 1 write() failed: " + ex.getMessage());
-					countDownLatch1.countDown();
-				})
-				.doOnSuccess(__ -> {
-					countDownLatch1.countDown();
-				})
-				.subscribe();
-
-		try {
-			countDownLatch1.await(WAIT_TIMEOUT, TimeUnit.SECONDS);
-		} catch (InterruptedException e) {
-			fail("TCP client 1 write() timed out");
-		}
-	}
-	
 	@When("TCP client 1 writes a binary message {string} to the TCP server 1")
-	public void tcp_client_writes_a_binary_message_to_the_tcp_server(String messageToSend) {
+	public void tcp_client_1_writes_a_binary_message_to_the_tcp_server_1(String messageToSend) {
 		final CountDownLatch countDownLatch1 = new CountDownLatch(1);
 
 		Link targetLink = new Link(new Endpoint(HOST_TO_TEST, -1), new Endpoint(HOST_TO_TEST, portNumber1),
@@ -293,10 +280,50 @@ public class TcpServerFluxerStepDefinitions {
 		} catch (InterruptedException e) {
 			fail("TCP client 1 write() timed out");
 		}
+
+		// This sleep is to make sure the message is sent separately without being
+		// merged to the previous message
+		try {
+			Thread.sleep(500);
+		} catch (InterruptedException e) {
+			fail("TCP client 1 write() timed out");
+		}
 	}
 
-	@Then("TCP server 1 can not start")
-	public void tcp_server_1_can_not_start() {
+	@When("TCP server 1 writes a binary message {string} to the TCP client 1")
+	public void tcp_server_writes_a_binary_message_to_the_tcp_client(String messageToSend) {
+		final CountDownLatch countDownLatch1 = new CountDownLatch(1);
+
+		Link targetLink = new Link(new Endpoint(HOST_TO_TEST, -1), new Endpoint(HOST_TO_TEST, portNumber1),
+				Link.Status.NONE);
+
+		tcpServerFluxer1.write(new Message(targetLink, ByteBufUtil.decodeHexDump(messageToSend)))
+				.doOnError(ex -> {
+					fail("TCP server 1 write() failed: " + ex.getMessage());
+					countDownLatch1.countDown();
+				})
+				.doOnSuccess(__ -> {
+					countDownLatch1.countDown();
+				})
+				.subscribe();
+
+		try {
+			countDownLatch1.await(WAIT_TIMEOUT, TimeUnit.SECONDS);
+		} catch (InterruptedException e) {
+			fail("TCP server 1 write() timed out");
+		}
+
+		// This sleep is to make sure the message is sent separately without being
+		// merged to the previous message
+		try {
+			Thread.sleep(500);
+		} catch (InterruptedException e) {
+			fail("TCP server 1 write() timed out");
+		}
+	}
+
+	@Then("TCP server 1 cannot start")
+	public void tcp_server_1_cannot_start() {
 		final CountDownLatch countDownLatch1 = new CountDownLatch(1);
 
 		tcpServerFluxer1.start()
@@ -316,8 +343,8 @@ public class TcpServerFluxerStepDefinitions {
 		}
 	}
 
-	@Then("TCP server 2 can not start")
-	public void tcp_server_2_can_not_start() {
+	@Then("TCP server 2 cannot start")
+	public void tcp_server_2_cannot_start() {
 		final CountDownLatch countDownLatch1 = new CountDownLatch(1);
 
 		tcpServerFluxer2.start()
@@ -334,6 +361,27 @@ public class TcpServerFluxerStepDefinitions {
 			countDownLatch1.await(WAIT_TIMEOUT, TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
 			fail("TCP server 2 start() timed out");
+		}
+	}
+	
+	@Then("TCP client 1 cannot start")
+	public void tcp_client_1_cannot_start() {
+		final CountDownLatch countDownLatch1 = new CountDownLatch(1);
+
+		tcpClientFluxer1.start()
+				.doOnError(ex -> {
+					countDownLatch1.countDown();
+				})
+				.doOnSuccess(__ -> {
+					fail("TCP client 1 start() should fail");
+					countDownLatch1.countDown();
+				})
+				.subscribe();
+
+		try {
+			countDownLatch1.await(WAIT_TIMEOUT, TimeUnit.SECONDS);
+		} catch (InterruptedException e) {
+			fail("TCP client 1 start() timed out");
 		}
 	}
 
@@ -372,26 +420,20 @@ public class TcpServerFluxerStepDefinitions {
 				.verify();
 	}
 
-	@Then("TCP server 1 publishes its read changes: a text message {string}")
-	public void tcp_server_publishes_its_read_changes_a_text_message(String expectedMessage) {
+	@Then("TCP server 1 publishes its read changes: 2 binary messages {string} and {string}")
+	public void tcp_server_publishes_its_read_changes_a_binary_message(String expectedMessage1,
+			String expectedMessage2) {
 		StepVerifier.create(tcpServerFluxer1.read())
 				.expectNextMatches(message -> {
-					return new String(message.getMessage()).equals(expectedMessage) &&
+					return ByteBufUtil.hexDump(message.getMessage()).equals(expectedMessage1) &&
 							message.getLink().getLocalEndpoint().getIpAddress().equals(HOST_TO_TEST) &&
 							message.getLink().getLocalEndpoint().getPort().equals(portNumber1) &&
 							message.getLink().getRemoteEndpoint().getIpAddress().equals(HOST_TO_TEST) &&
 							!message.getLink().getRemoteEndpoint().getPort().equals(portNumber1) &&
 							message.getLink().getStatus().equals(Link.Status.CONNECTED);
 				})
-				.expectComplete()
-				.verify();
-	}
-	
-	@Then("TCP server 1 publishes its read changes: a binary message {string}")
-	public void tcp_server_publishes_its_read_changes_a_binary_message(String expectedMessage) {
-		StepVerifier.create(tcpServerFluxer1.read())
 				.expectNextMatches(message -> {
-					return ByteBufUtil.hexDump(message.getMessage()).equals(expectedMessage) &&
+					return ByteBufUtil.hexDump(message.getMessage()).equals(expectedMessage2) &&
 							message.getLink().getLocalEndpoint().getIpAddress().equals(HOST_TO_TEST) &&
 							message.getLink().getLocalEndpoint().getPort().equals(portNumber1) &&
 							message.getLink().getRemoteEndpoint().getIpAddress().equals(HOST_TO_TEST) &&
