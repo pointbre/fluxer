@@ -49,9 +49,9 @@ public abstract class TcpFluxer implements Fluxer {
 	protected DisposableChannel disposableChannel;
 	protected EventExecutor executor;
 	protected ChannelGroup group;
-	
+
 	abstract protected void createTcpConnection(Sinks.One<Void> resultSink);
-	
+
 	@Override
 	public Mono<Void> start() {
 
@@ -78,7 +78,6 @@ public abstract class TcpFluxer implements Fluxer {
 
 	@Override
 	public Mono<Void> stop() {
-		Sinks.One<Void> resultSink = Sinks.one();
 
 		if (statusSink == null ||
 				linkSink == null ||
@@ -86,27 +85,31 @@ public abstract class TcpFluxer implements Fluxer {
 				disposableChannel == null ||
 				group == null ||
 				executor == null) {
+			Sinks.One<Void> resultSink = Sinks.one();
+			
 			emitStopException(resultSink, "Not started yet, so can't stop");
 			emitStatus(Status.STOPPED);
-		} else {
-			emitStatus(Status.STOPPING);
-
-			group.disconnect().addListener(new ChannelGroupFutureListener() {
-				@Override
-				public void operationComplete(ChannelGroupFuture future) throws Exception {
-
-					executor.shutdownGracefully();
-					group.close();
-					disposableChannel.dispose();
-
-					emitStatus(Status.STOPPED);
-
-					statusSink.tryEmitComplete();
-					linkSink.tryEmitComplete();
-					inboundSink.tryEmitComplete();
-				}
-			});
+			
+			return Mono.empty();
 		}
+
+		emitStatus(Status.STOPPING);
+
+		group.disconnect().addListener(new ChannelGroupFutureListener() {
+			@Override
+			public void operationComplete(ChannelGroupFuture future) throws Exception {
+
+				executor.shutdownGracefully();
+				group.close();
+				disposableChannel.dispose();
+
+				emitStatus(Status.STOPPED);
+
+				statusSink.tryEmitComplete();
+				linkSink.tryEmitComplete();
+				inboundSink.tryEmitComplete();
+			}
+		});
 
 		return disposableChannel.onDispose();
 	}
@@ -165,7 +168,7 @@ public abstract class TcpFluxer implements Fluxer {
 
 		return resultSink.asMono();
 	}
-	
+
 	public String getIpAddress() {
 		return ipAddress;
 	}
@@ -173,7 +176,7 @@ public abstract class TcpFluxer implements Fluxer {
 	public Integer getPort() {
 		return port;
 	}
-	
+
 	protected void emitStatus(Status status) {
 		log.debug("status updated: " + status.toString());
 		statusSink.tryEmitNext(status);
@@ -191,12 +194,13 @@ public abstract class TcpFluxer implements Fluxer {
 	protected void emitInbound(Connection connection, byte[] receivedMessage) {
 		InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
 		InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
+		// FIXME: Assuming the link is connected, but would it be ok?
 		Link newLink = new Link(new Endpoint(local.getAddress().getHostAddress(), local.getPort()),
-				new Endpoint(remote.getAddress().getHostAddress(), remote.getPort()), Link.Status.NONE);
+				new Endpoint(remote.getAddress().getHostAddress(), remote.getPort()), Link.Status.CONNECTED);
 		log.debug("inbound updated: " + newLink + " --> " + ByteBufUtil.hexDump(receivedMessage));
 		inboundSink.tryEmitNext(new Message(newLink, receivedMessage));
 	}
-	
+
 	private void initializeStreams() {
 		statusSink = Sinks.many()
 				.multicast()
@@ -231,7 +235,7 @@ public abstract class TcpFluxer implements Fluxer {
 				})
 				.log();
 	}
-	
+
 	private boolean validate() {
 		// Null or blank
 		if (ipAddress == null || ipAddress.isBlank()) {
@@ -266,7 +270,6 @@ public abstract class TcpFluxer implements Fluxer {
 							log.debug("in doOnComplete");
 						})
 						.doOnNext(buf -> {
-							// TODO: Test if this works
 							in.withConnection(connection -> {
 								log.debug(ByteBufUtil.hexDump(buf) + " from " + connection + "???");
 								log.debug(connection.channel().localAddress().toString());
@@ -300,18 +303,15 @@ public abstract class TcpFluxer implements Fluxer {
 	}
 
 	private boolean isSameLink(Channel channel, @NonNull Link link) {
-		InetSocketAddress local = (InetSocketAddress) channel.localAddress();
 		InetSocketAddress remote = (InetSocketAddress) channel.remoteAddress();
-		if (link.getLocalEndpoint().getIpAddress().equals(local.getAddress().getHostAddress()) &&
-				link.getLocalEndpoint().getPort().equals(Integer.valueOf(local.getPort())) &&
-				link.getRemoteEndpoint().getIpAddress().equals(remote.getAddress().getHostAddress()) &&
+		if (link.getRemoteEndpoint().getIpAddress().equals(remote.getAddress().getHostAddress()) &&
 				link.getRemoteEndpoint().getPort().equals(Integer.valueOf(remote.getPort()))) {
 			return true;
 		}
 
 		return false;
 	}
-	
+
 	private void emitStartException(Sinks.One<Void> resultSink, String errorMessage) {
 		log.error(errorMessage);
 		resultSink.tryEmitError(new StartException(errorMessage));

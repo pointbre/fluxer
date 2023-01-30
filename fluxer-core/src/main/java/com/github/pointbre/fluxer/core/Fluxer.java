@@ -62,7 +62,6 @@ public interface Fluxer {
 			CONNECTED, DISCONNECTED, NONE;
 
 		}
-		
 	}
 
 	@Value
