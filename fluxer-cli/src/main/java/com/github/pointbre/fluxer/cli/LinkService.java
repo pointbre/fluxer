@@ -11,7 +11,7 @@ import com.github.pointbre.fluxer.core.TcpServerFluxer;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.Disposable;
 
-@Service
+//@Service
 @Slf4j
 public class LinkService {
 

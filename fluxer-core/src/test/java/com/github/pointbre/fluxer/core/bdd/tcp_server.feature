@@ -26,8 +26,10 @@ Feature: TCP server
         And TCP client 1 is created at the found free port 1
         When TCP server 1 starts successfully
         And TCP client 1 starts successfully
+        And TCP server 1 publishes its link changes
         And TCP client 1 writes a binary message "313233" to the TCP server 1
         And TCP client 1 writes a binary message "343536" to the TCP server 1
+        And TCP server 1 writes a binary message "373839" to the TCP client 1
         And TCP client 1 stops successfully
         And TCP server 1 stops successfully
         Then TCP server 1 publishes its status changes: stopped -> starting -> started -> stopping -> stopped

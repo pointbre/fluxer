@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+    http://www.springframework.org/schema/beans/spring-beans.xsd
+    http://www.springframework.org/schema/context
+    http://www.springframework.org/schema/context/spring-context.xsd">
+
+
+	<!-- Define your beans here -->
+
+	<!-- define the dependency -->
+	<!--
+	<bean id="myFortuneService"
+		class="com.luv2code.springdemo.HappyFortuneService">
+	</bean>
+    -->
+    
+    <bean id="myFortune" class="com.github.pointbre.fluxer.cli.coach.HappyFortuneService"/>
+    
+    <bean id="myRandomFortune" class="com.github.pointbre.fluxer.cli.coach.RandomFortuneService"/>
+
+	<bean id="myCoach" class="com.github.pointbre.fluxer.cli.coach.TrackCoach">
+       <!-- constructor injection -->
+	   <constructor-arg ref="myRandomFortune"/>
+	</bean>
+	
+	<context:property-placeholder location="classpath:sport.properties"/>
+	
+    <bean id="myCricketCoach" class="com.github.pointbre.fluxer.cli.coach.CricketCoach">
+      <!-- setter injection -->
+      <property name="fortuneService" ref="myRandomFortune"/>
+      <property name="emailAddress" value="${foo.email}"/>
+      <property name="team" value="${foo.team}"/>
+    </bean>
+
+
+</beans>
+
+
+
+
+

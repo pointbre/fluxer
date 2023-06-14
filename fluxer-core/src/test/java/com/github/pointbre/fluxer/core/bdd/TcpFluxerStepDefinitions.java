@@ -43,6 +43,7 @@ public class TcpFluxerStepDefinitions {
 	Disposable tcpServerFluxer2Read;
 
 	TcpFluxer tcpClientFluxer1;
+	Link connectedClientLink;
 
 	Disposable tcpClientFluxer1Status;
 	Disposable tcpClientFluxer1Link;
@@ -138,7 +139,7 @@ public class TcpFluxerStepDefinitions {
 			}
 		}
 	}
-	
+
 	@Given("a free port 1 is found")
 	public void a_free_port_1_is_found() {
 		portNumber1 = TcpUtil.findFreePort();
@@ -172,6 +173,11 @@ public class TcpFluxerStepDefinitions {
 	@Given("TCP client 1 is created at the found free port 1")
 	public void tcp_client_is_created_on_at_the_found_free_port() {
 		tcpClientFluxer1 = new TcpClientFluxer(HOST_TO_TEST, portNumber1);
+	}
+
+	@Given("TCP client 1 is created at {int}")
+	public void tcp_client_1_is_created_on_at(int portNumber) {
+		tcpClientFluxer1 = new TcpClientFluxer(HOST_TO_TEST, portNumber);
 	}
 
 	@When("TCP server 1 starts successfully")
@@ -294,10 +300,7 @@ public class TcpFluxerStepDefinitions {
 	public void tcp_server_writes_a_binary_message_to_the_tcp_client(String messageToSend) {
 		final CountDownLatch countDownLatch1 = new CountDownLatch(1);
 
-		Link targetLink = new Link(new Endpoint(HOST_TO_TEST, -1), new Endpoint(HOST_TO_TEST, portNumber1),
-				Link.Status.NONE);
-
-		tcpServerFluxer1.write(new Message(targetLink, ByteBufUtil.decodeHexDump(messageToSend)))
+		tcpServerFluxer1.write(new Message(connectedClientLink, ByteBufUtil.decodeHexDump(messageToSend)))
 				.doOnError(ex -> {
 					fail("TCP server 1 write() failed: " + ex.getMessage());
 					countDownLatch1.countDown();
@@ -320,6 +323,29 @@ public class TcpFluxerStepDefinitions {
 		} catch (InterruptedException e) {
 			fail("TCP server 1 write() timed out");
 		}
+	}
+
+	@When("TCP server 1 publishes its link changes")
+	public void tcp_server_1_publishes_its_link_changes() {
+		final CountDownLatch countDownLatch1 = new CountDownLatch(1);
+
+		tcpServerFluxer1Link = tcpServerFluxer1.link()
+				.doOnError(ex -> {
+					fail("TCP server 1 link() failed: " + ex.getMessage());
+				})
+				.doOnNext(link -> {
+					connectedClientLink = link;
+					countDownLatch1.countDown();
+				})
+				.subscribe();
+
+		try {
+			countDownLatch1.await(WAIT_TIMEOUT, TimeUnit.SECONDS);
+		} catch (InterruptedException e) {
+			fail("TCP server 1 link() timed out");
+		}
+		
+		tcpServerFluxer1Link.dispose();
 	}
 
 	@Then("TCP server 1 cannot start")
@@ -363,7 +389,7 @@ public class TcpFluxerStepDefinitions {
 			fail("TCP server 2 start() timed out");
 		}
 	}
-	
+
 	@Then("TCP client 1 cannot start")
 	public void tcp_client_1_cannot_start() {
 		final CountDownLatch countDownLatch1 = new CountDownLatch(1);
