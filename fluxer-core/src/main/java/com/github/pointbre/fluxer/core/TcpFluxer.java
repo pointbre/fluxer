@@ -79,17 +79,13 @@ public abstract class TcpFluxer implements Fluxer {
 	@Override
 	public Mono<Void> stop() {
 
-		if (statusSink == null ||
-				linkSink == null ||
-				inboundSink == null ||
-				disposableChannel == null ||
-				group == null ||
-				executor == null) {
+		if (statusSink == null || linkSink == null || inboundSink == null || disposableChannel == null || group == null
+				|| executor == null) {
 			Sinks.One<Void> resultSink = Sinks.one();
-			
+
 			emitStopException(resultSink, "Not started yet, so can't stop");
 			emitStatus(Status.STOPPED);
-			
+
 			return Mono.empty();
 		}
 
@@ -153,7 +149,6 @@ public abstract class TcpFluxer implements Fluxer {
 			if (linkFound) {
 				channel.writeAndFlush(Unpooled.wrappedBuffer(message.getMessage()))
 						.addListener(new ChannelFutureListener() {
-
 							@Override
 							public void operationComplete(ChannelFuture future) throws Exception {
 								log.debug("writing to " + message.getLink() + " completed: "
@@ -202,38 +197,20 @@ public abstract class TcpFluxer implements Fluxer {
 	}
 
 	private void initializeStreams() {
-		statusSink = Sinks.many()
-				.multicast()
-				.<Status>onBackpressureBuffer();
-		statusFlux = statusSink
-				.asFlux()
-				.publishOn(Schedulers.boundedElastic())
-				.doOnSubscribe(sub -> {
-					log.debug("A new subscriber to status flux: " + sub);
-				})
-				.log();
+		statusSink = Sinks.many().multicast().<Status>onBackpressureBuffer();
+		statusFlux = statusSink.asFlux().publishOn(Schedulers.boundedElastic()).doOnSubscribe(sub -> {
+			log.debug("A new subscriber to status flux: " + sub);
+		}).log();
 
-		linkSink = Sinks.many()
-				.multicast()
-				.<Link>onBackpressureBuffer();
-		linkFlux = linkSink
-				.asFlux()
-				.publishOn(Schedulers.boundedElastic())
-				.doOnSubscribe(sub -> {
-					log.debug("A new subscriber to link flux: " + sub);
-				})
-				.log();
+		linkSink = Sinks.many().multicast().<Link>onBackpressureBuffer();
+		linkFlux = linkSink.asFlux().publishOn(Schedulers.boundedElastic()).doOnSubscribe(sub -> {
+			log.debug("A new subscriber to link flux: " + sub);
+		}).log();
 
-		inboundSink = Sinks.many()
-				.multicast()
-				.<Message>onBackpressureBuffer();
-		inboundFlux = inboundSink
-				.asFlux()
-				.publishOn(Schedulers.boundedElastic())
-				.doOnSubscribe(sub -> {
-					log.debug("A new subscriber to inbound flux: " + sub);
-				})
-				.log();
+		inboundSink = Sinks.many().multicast().<Message>onBackpressureBuffer();
+		inboundFlux = inboundSink.asFlux().publishOn(Schedulers.boundedElastic()).doOnSubscribe(sub -> {
+			log.debug("A new subscriber to inbound flux: " + sub);
+		}).log();
 	}
 
 	private boolean validate() {
@@ -260,52 +237,41 @@ public abstract class TcpFluxer implements Fluxer {
 					log.debug("withConnection");
 					log.debug(tcpConnection.channel().localAddress().toString());
 					log.debug(tcpConnection.channel().remoteAddress().toString());
-				})
-						.receive()
-						.asByteArray()
-						.doOnCancel(() -> {
-							log.debug("in doOnCancel");
-						})
-						.doOnComplete(() -> {
-							log.debug("in doOnComplete");
-						})
-						.doOnNext(buf -> {
-							in.withConnection(connection -> {
-								log.debug(ByteBufUtil.hexDump(buf) + " from " + connection + "???");
-								log.debug(connection.channel().localAddress().toString());
-								log.debug(connection.channel().remoteAddress().toString());
-								emitInbound(connection, buf);
-							});
-						})
-						.doOnError(e -> {
-							log.debug("in doOnError " + e);
-						})
-						.doOnSubscribe(s -> {
-							log.debug("in doOnSubscribe " + s);
-						})
-						.doOnTerminate(() -> {
-							log.debug("in doOnTerminate");
-						})
-						.subscribe();
+				}).receive().asByteArray().doOnCancel(() -> {
+					log.debug("in doOnCancel");
+				}).doOnComplete(() -> {
+					log.debug("in doOnComplete");
+				}).doOnNext(buf -> {
+					in.withConnection(connection -> {
+						System.out.println(ByteBufUtil.hexDump(buf) + " from " + connection + "???");
+						log.debug(ByteBufUtil.hexDump(buf) + " from " + connection + "???");
+						log.debug(connection.channel().localAddress().toString());
+						log.debug(connection.channel().remoteAddress().toString());
+						emitInbound(connection, buf);
+					});
+				}).doOnError(e -> {
+					log.debug("in doOnError " + e);
+				}).doOnSubscribe(s -> {
+					log.debug("in doOnSubscribe " + s);
+				}).doOnTerminate(() -> {
+					log.debug("in doOnTerminate");
+				}).subscribe();
 
-				return out.neverComplete()
-						.doOnTerminate(() -> {
-							log.debug("out doOnTerminate");
-						})
-						.doOnError(ex -> {
-							log.debug("out doOnError: " + ex.getMessage());
-						})
-						.doOnCancel(() -> {
-							log.debug("out doOnCancel");
-						});
+				return out.neverComplete().doOnTerminate(() -> {
+					log.debug("out doOnTerminate");
+				}).doOnError(ex -> {
+					log.debug("out doOnError: " + ex.getMessage());
+				}).doOnCancel(() -> {
+					log.debug("out doOnCancel");
+				});
 			}
 		};
 	}
 
 	private boolean isSameLink(Channel channel, @NonNull Link link) {
 		InetSocketAddress remote = (InetSocketAddress) channel.remoteAddress();
-		if (link.getRemoteEndpoint().getIpAddress().equals(remote.getAddress().getHostAddress()) &&
-				link.getRemoteEndpoint().getPort().equals(Integer.valueOf(remote.getPort()))) {
+		if (link.getRemoteEndpoint().getIpAddress().equals(remote.getAddress().getHostAddress())
+				&& link.getRemoteEndpoint().getPort().equals(Integer.valueOf(remote.getPort()))) {
 			return true;
 		}
 

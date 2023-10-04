@@ -1,5 +1,7 @@
 package com.github.pointbre.fluxer.core;
 
+import io.netty.channel.ChannelOption;
+import io.netty.handler.flush.FlushConsolidationHandler;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Sinks.One;
 import reactor.netty.ConnectionObserver;
@@ -15,6 +17,7 @@ public class TcpServerFluxer extends TcpFluxer {
 	@Override
 	protected void createTcpConnection(One<Void> resultSink) {
 		TcpServer tcpServer = TcpServer.create()
+				.childOption(ChannelOption.TCP_NODELAY, true)
 				.doOnBind(tcpServerConfig -> {
 					log.debug("server doOnBind " + tcpServerConfig);
 				})
@@ -22,8 +25,10 @@ public class TcpServerFluxer extends TcpFluxer {
 					log.debug("server doOnBound " + disposableServer);
 				})
 				.doOnConnection(connection -> {
-					log.debug("server doOnConnection " + connection);
+					log.debug("server doOnConnection " + connection);			
 
+//					connection.addHandlerFirst(new FlushConsolidationHandler(1, true));
+					
 					group.add(connection.channel());
 					log.debug("New connection added:" + connection + ", currently " + group.size());
 

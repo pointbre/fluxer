@@ -18,17 +18,37 @@ Feature: TCP client
         Given TCP client 1 is created at 65536
         Then TCP client 1 cannot start
         
-    #Scenario: TCP client starts up and then interact with TCP server
-        #Given a free port 1 is found
-        #And TCP server 1 is created at the found free port 1
-        #And TCP client 1 is created at the found free port 1
-        #When TCP server 1 starts successfully
-        #And TCP client 1 starts successfully
+    Scenario: 1
+        Given a free port 1 is found
+        And TCP server 1 is created at the found free port 1
+        And TCP client 1 is created at the found free port 1
+        When TCP server 1 starts successfully
+        And TCP client 1 starts successfully
         #And TCP client 1 writes a binary message "313233" to the TCP server 1
+        #And TCP server 1 writes a binary message "414243" to the TCP client 1
         #And TCP client 1 writes a binary message "343536" to the TCP server 1
-        #And TCP client 1 stops successfully
-        #And TCP server 1 stops successfully
-        #Then TCP server 1 publishes its status changes: stopped -> starting -> started -> stopping -> stopped
-        #And TCP server 1 publishes its link changes: connected -> disconnected
-        #And TCP server 1 publishes its read changes: 2 binary messages "313233" and "343536"
+        And TCP client 1 stops successfully
+        And TCP server 1 stops successfully
+        Then TCP server 1 publishes its status changes: stopped -> starting -> started -> stopping -> stopped
 
+    Scenario: 2
+        Given a free port 1 is found
+        And TCP server 1 is created at the found free port 1
+        And TCP client 1 is created at the found free port 1goo
+        When TCP server 1 starts successfully
+        And TCP client 1 starts successfully
+        And TCP client 1 stops successfully
+        And TCP server 1 stops successfully
+        And TCP server 1 publishes its link changes: connected -> disconnected
+
+    Scenario: 3
+        Given a free port 1 is found
+        And TCP server 1 is created at the found free port 1
+        And TCP client 1 is created at the found free port 1
+        When TCP server 1 starts successfully
+        And TCP client 1 starts successfully
+        And TCP client 1 writes a binary message "313233" to the TCP server 1
+        And TCP client 1 stops successfully
+        And TCP server 1 stops successfully
+        Then TCP server 1 publishes its read changes: 1 binary message "313233"
+        

@@ -287,13 +287,13 @@ public class TcpFluxerStepDefinitions {
 			fail("TCP client 1 write() timed out");
 		}
 
-		// This sleep is to make sure the message is sent separately without being
-		// merged to the previous message
-		try {
-			Thread.sleep(500);
-		} catch (InterruptedException e) {
-			fail("TCP client 1 write() timed out");
-		}
+//		// This sleep is to make sure the message is sent separately without being
+//		// merged to the previous message
+//		try {
+//			Thread.sleep(500);
+//		} catch (InterruptedException e) {
+//			fail("TCP client 1 write() timed out");
+//		}
 	}
 
 	@When("TCP server 1 writes a binary message {string} to the TCP client 1")
@@ -332,6 +332,7 @@ public class TcpFluxerStepDefinitions {
 		tcpServerFluxer1Link = tcpServerFluxer1.link()
 				.doOnError(ex -> {
 					fail("TCP server 1 link() failed: " + ex.getMessage());
+					countDownLatch1.countDown();
 				})
 				.doOnNext(link -> {
 					connectedClientLink = link;
@@ -423,7 +424,7 @@ public class TcpFluxerStepDefinitions {
 				.verify();
 	}
 
-	@Then("TCP server 1 publishes its link changes: connected -> disconnected")
+	@When("TCP server 1 publishes its link changes: connected -> disconnected")
 	public void tcp_server_1_publishes_its_link_changes_connected_disconnected() {
 		// Please note that the port allocated to the connected client is random, so
 		// verifying only it's not same with server's port
@@ -435,6 +436,7 @@ public class TcpFluxerStepDefinitions {
 							!link.getRemoteEndpoint().getPort().equals(portNumber1) &&
 							link.getStatus().equals(Link.Status.CONNECTED);
 				})
+//				.thenAwait()
 				.expectNextMatches(link -> {
 					return link.getLocalEndpoint().getIpAddress().equals(HOST_TO_TEST) &&
 							link.getLocalEndpoint().getPort().equals(portNumber1) &&
@@ -442,12 +444,13 @@ public class TcpFluxerStepDefinitions {
 							!link.getRemoteEndpoint().getPort().equals(portNumber1) &&
 							link.getStatus().equals(Link.Status.DISCONNECTED);
 				})
+//				.thenAwait()
 				.expectComplete()
 				.verify();
 	}
 
 	@Then("TCP server 1 publishes its read changes: 2 binary messages {string} and {string}")
-	public void tcp_server_publishes_its_read_changes_a_binary_message(String expectedMessage1,
+	public void tcp_server_publishes_its_read_changes_2_binary_messages(String expectedMessage1,
 			String expectedMessage2) {
 		StepVerifier.create(tcpServerFluxer1.read())
 				.expectNextMatches(message -> {
@@ -460,6 +463,21 @@ public class TcpFluxerStepDefinitions {
 				})
 				.expectNextMatches(message -> {
 					return ByteBufUtil.hexDump(message.getMessage()).equals(expectedMessage2) &&
+							message.getLink().getLocalEndpoint().getIpAddress().equals(HOST_TO_TEST) &&
+							message.getLink().getLocalEndpoint().getPort().equals(portNumber1) &&
+							message.getLink().getRemoteEndpoint().getIpAddress().equals(HOST_TO_TEST) &&
+							!message.getLink().getRemoteEndpoint().getPort().equals(portNumber1) &&
+							message.getLink().getStatus().equals(Link.Status.CONNECTED);
+				})
+				.expectComplete()
+				.verify();
+	}
+	
+	@Then("TCP server 1 publishes its read changes: 1 binary message {string}")
+	public void tcp_server_publishes_its_read_changes_1_binary_message(String expectedMessage1) {
+		StepVerifier.create(tcpServerFluxer1.read())
+				.expectNextMatches(message -> {
+					return ByteBufUtil.hexDump(message.getMessage()).equals(expectedMessage1) &&
 							message.getLink().getLocalEndpoint().getIpAddress().equals(HOST_TO_TEST) &&
 							message.getLink().getLocalEndpoint().getPort().equals(portNumber1) &&
 							message.getLink().getRemoteEndpoint().getIpAddress().equals(HOST_TO_TEST) &&
