@@ -72,7 +72,7 @@ public class LinkService {
 	private Disposable inboundSubscription = null;
 
 	@PostConstruct
-	public void postConstruct() {
+	public void postConstruct() throws Exception {
 		Fluxer fluxer = new TcpServerFluxer("localhost", 4501);
 
 		fluxer.start()
@@ -80,9 +80,9 @@ public class LinkService {
 				.doOnSuccess(__ -> {
 					log.debug("doOnSuccess");
 					log.debug("subscribing to streams");
-					statusSubscription = fluxer.status().subscribe(s -> log.debug("Status changed: " + s));
+					statusSubscription = fluxer.state().subscribe(s -> log.debug("Status changed: " + s));
 					linkSubscription = fluxer.link().subscribe(s -> log.debug("Link changed: " + s));
-					inboundSubscription = fluxer.read().subscribe(m -> log.debug("Inbound changed: " + m));
+//					inboundSubscription = fluxer.read().subscribe(m -> log.debug("Inbound changed: " + m));
 				})
 				.subscribe();
 	}

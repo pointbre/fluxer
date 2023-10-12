@@ -8,106 +8,71 @@ import lombok.Value;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-public interface Fluxer {
+public interface Fluxer extends AutoCloseable {
+    Mono<Result> start();
 
-	Mono<Void> start();
+    Mono<Result> stop();
 
-	Mono<Void> stop();
+    Mono<Result> send(byte[] message, Endpoint remote);
 
-	Flux<Status> status();
+    Flux<State> state();
 
-	Flux<Link> link();
-	
-    Flux<Message> read();
-    
-    Mono<Void> write(Message message);
+    Flux<Link> link();
 
-	public enum Status {
+    Flux<Message> message();
 
-		STARTING, STARTED, STOPPING, STOPPED;
+    public enum State {
+	STARTING, STARTED, STOPPING, STOPPED;
+    }
 
-	}
-	
-	@Value
-	@AllArgsConstructor
-	@Getter
-	@ToString
-	public class Endpoint {
-		
-		@NonNull
-		private String ipAddress;
+    public enum Event {
+	START_REQUESTED, STOP_REQUESTED, PROCESSED, FAILED;
+    }
 
-		@NonNull
-		private Integer port;
-		
-	}
+    public enum Result {
+	PROCESSED, FAILED
+    }
 
-	@Value
-	@AllArgsConstructor
-	@Getter
-	@ToString
-	public class Link {
+    @Value
+    @AllArgsConstructor
+    @Getter
+    @ToString
+    public class Endpoint {
+	@NonNull
+	private String ipAddress;
+	@NonNull
+	private Integer port;
+    }
 
-		@NonNull
-		private Endpoint localEndpoint;
-
-		@NonNull
-		private Endpoint remoteEndpoint;
-
-		@NonNull
-		private Status status;
-
-		public enum Status {
-
-			CONNECTED, DISCONNECTED, NONE;
-
-		}
+    @Value
+    @AllArgsConstructor
+    @Getter
+    @ToString
+    public class Link {
+	public enum State {
+	    CONNECTED, DISCONNECTED, NONE;
 	}
 
-	@Value
-	@AllArgsConstructor
-	@Getter
-	@ToString
-	public class Message {
+	@NonNull
+	private State state;
+	private Endpoint local;
+	private Endpoint remote;
+    }
 
-		@NonNull
-		private Link link;
-
-		@NonNull
-		private byte[] message;
-
+    @Value
+    @AllArgsConstructor
+    @Getter
+    @ToString
+    public class Message {
+	public enum Type {
+	    INBOUND, OUTBOUND;
 	}
 
-	public class FluxerException extends Exception {
-
-		public FluxerException(String message) {
-			super(message);
-		}
-
-	}
-
-	public class StartException extends FluxerException {
-
-		public StartException(String message) {
-			super(message);
-		}
-
-	}
-
-	public class StopException extends FluxerException {
-
-		public StopException(String message) {
-			super(message);
-		}
-
-	}
-
-	public class WriteException extends FluxerException {
-
-		public WriteException(String message) {
-			super(message);
-		}
-
-	}
-
+	@NonNull
+	private Type type;
+	@NonNull
+	private Link link;
+	@NonNull
+	private byte[] message;
+    }
 }

@@ -10,7 +10,7 @@ public class PortNumberExtension implements TestInstancePostProcessor {
 	@Override
 	public void postProcessTestInstance(Object testInstance, ExtensionContext context) throws Exception {
 		testInstance.getClass()
-				.getMethod("setPort", Integer.class)
+				.getMethod("setPortNumber", Integer.class)
 				.invoke(testInstance, TcpUtil.findFreePort());
 	}
 }
