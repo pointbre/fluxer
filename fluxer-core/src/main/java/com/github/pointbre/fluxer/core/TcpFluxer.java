@@ -1,6 +1,7 @@
 package com.github.pointbre.fluxer.core;
 
 import java.net.InetSocketAddress;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -20,7 +21,11 @@ import org.springframework.statemachine.transition.Transition;
 
 import com.github.pointbre.fluxer.core.Fluxer.Message.Type;
 
+import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.group.ChannelGroup;
 import io.netty.channel.group.ChannelGroupFuture;
 import io.netty.channel.group.ChannelGroupFutureListener;
@@ -313,33 +318,32 @@ public abstract class TcpFluxer implements Fluxer {
 	// https://stackoverflow.com/questions/10503586/writing-to-all-but-one-in-a-tcp-netty-channelgroup
 
 	Sinks.One<Result> resultSink = Sinks.one();
-//
-//	if (group != null) {
-//	    Iterator<Channel> channelIterator = group.iterator();
-//	    boolean linkFound = false;
-//	    Channel channel = null;
-//	    while (channelIterator.hasNext()) {
-//		channel = channelIterator.next();
-//		if (isSameLink(channel, message.getLink())) {
-//		    linkFound = true;
-//		    break;
-//		}
-//	    }
-//
-//	    if (linkFound) {
-//		channel.writeAndFlush(Unpooled.wrappedBuffer(message.getMessage()))
-//			.addListener(new ChannelFutureListener() {
-//			    @Override
-//			    public void operationComplete(ChannelFuture future) throws Exception {
-//				System.out.println("writing to " + message.getLink() + " completed: "
-//					+ ByteBufUtil.hexDump(message.getMessage()));
-	resultSink.tryEmitValue(Result.PROCESSED);
-//			    }
-//			});
-//	    } else {
-////		emitWriteException(resultSink, message.getLink() + " is not connected yet.");
-//	    }
-//	}
+
+	if (group != null) {
+	    Iterator<Channel> channelIterator = group.iterator();
+	    boolean linkFound = false;
+	    Channel channel = null;
+	    while (channelIterator.hasNext()) {
+		channel = channelIterator.next();
+		if (isSameLink(channel, remote)) {
+		    linkFound = true;
+		    break;
+		}
+	    }
+
+	    if (linkFound) {
+		channel.writeAndFlush(Unpooled.wrappedBuffer(message))
+			.addListener(new ChannelFutureListener() {
+			    @Override
+			    public void operationComplete(ChannelFuture future) throws Exception {
+//				System.out.println("writing to " + remote + " completed: " + ByteBufUtil.hexDump(message));
+				resultSink.tryEmitValue(Result.PROCESSED);
+			    }
+			});
+	    } else {
+		resultSink.tryEmitValue(Result.FAILED);
+	    }
+	}
 
 	return resultSink.asMono();
     }
@@ -551,10 +555,10 @@ public abstract class TcpFluxer implements Fluxer {
 	return true;
     }
 
-    private boolean isSameLink(Channel channel, @NonNull Link link) {
-	InetSocketAddress remote = (InetSocketAddress) channel.remoteAddress();
-	if (link.getRemote().getIpAddress().equals(remote.getAddress().getHostAddress())
-		&& link.getRemote().getPort().equals(Integer.valueOf(remote.getPort()))) {
+    private boolean isSameLink(@NonNull Channel channel, @NonNull Endpoint remote) {
+	InetSocketAddress channelRemoteAddress = (InetSocketAddress) channel.remoteAddress();
+	if (remote.getIpAddress().equals(channelRemoteAddress.getAddress().getHostAddress())
+		&& remote.getPort().equals(Integer.valueOf(channelRemoteAddress.getPort()))) {
 	    return true;
 	}
 

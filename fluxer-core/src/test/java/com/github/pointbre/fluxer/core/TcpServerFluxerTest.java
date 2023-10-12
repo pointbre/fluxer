@@ -2,14 +2,18 @@ package com.github.pointbre.fluxer.core;
 
 import static org.junit.jupiter.api.Assertions.fail;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.slf4j.Logger;
 
+import com.github.pointbre.fluxer.core.Fluxer.Link;
+
+import io.netty.buffer.ByteBufUtil;
 import lombok.Cleanup;
 import lombok.extern.slf4j.Slf4j;
 
@@ -18,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 @ExtendWith(PortNumberExtension.class)
 class TcpServerFluxerTest {
 
+    private static final String LOCALHOST_IP_ADDR = "127.0.0.1";
     private Integer portNumber;
 
     public void setPortNumber(Integer portNumber) {
@@ -27,11 +32,14 @@ class TcpServerFluxerTest {
     @Test
     void test() throws Exception {
 	@Cleanup
-	Fluxer tcpServer = new TcpServerFluxer("127.0.0.1", portNumber);
-	
+	Fluxer tcpServer = new TcpServerFluxer(LOCALHOST_IP_ADDR, portNumber);
+
 	@Cleanup
-	final Fluxer tcpClient = new TcpClientFluxer("127.0.0.1", portNumber);
-	
+	final Fluxer tcpClient = new TcpClientFluxer(LOCALHOST_IP_ADDR, portNumber);
+
+	final List<Link> serverLinks = new ArrayList<>();
+	final List<Link> clientLinks = new ArrayList<>();
+
 	// Subscribe to state right after tcp server instance is created
 	tcpServer.state()
 		.doOnError(error -> {
@@ -50,12 +58,27 @@ class TcpServerFluxerTest {
 		.doOnError(error -> {
 		    fail("Shouldn't throw an error");
 		}).doOnNext(link -> {
-		    System.out.println("subscriber 1 | Server link received: " + link);
+		    serverLinks.add(link);
+		    System.out.println("subscriber 1 | Server link received: " + link + ", currently "
+			    + serverLinks.size() + " connected");
 		}).doOnComplete(new Runnable() {
 		    @Override
 		    public void run() {
 			System.out.println(
 				"subscriber 1 | Server link completed");
+		    }
+		}).subscribe();
+
+	tcpServer.message()
+		.doOnError(error -> {
+		    fail("Shouldn't throw an error");
+		}).doOnNext(message -> {
+		    System.out.println("subscriber 1 | Server message received: " + ByteBufUtil.hexDump(message.getMessage()));
+		}).doOnComplete(new Runnable() {
+		    @Override
+		    public void run() {
+			System.out.println(
+				"subscriber 1 | Server message completed");
 		    }
 		}).subscribe();
 
@@ -76,12 +99,26 @@ class TcpServerFluxerTest {
 		.doOnError(error -> {
 		    fail("Shouldn't throw an error");
 		}).doOnNext(link -> {
+		    clientLinks.add(link);
 		    System.out.println("subscriber 1 | client link received: " + link);
 		}).doOnComplete(new Runnable() {
 		    @Override
 		    public void run() {
 			System.out.println(
 				"subscriber 1 | client link completed");
+		    }
+		}).subscribe();
+
+	tcpClient.message()
+		.doOnError(error -> {
+		    fail("Shouldn't throw an error");
+		}).doOnNext(message -> {
+		    System.out.println("subscriber 1 | client message received: " + ByteBufUtil.hexDump(message.getMessage()));
+		}).doOnComplete(new Runnable() {
+		    @Override
+		    public void run() {
+			System.out.println(
+				"subscriber 1 | client message completed");
 		    }
 		}).subscribe();
 
@@ -151,6 +188,38 @@ class TcpServerFluxerTest {
 	    countDownLatch5.await(5, TimeUnit.SECONDS);
 	} catch (InterruptedException e) {
 	    fail("Client failed to start again");
+	}
+
+	long now6 = System.currentTimeMillis();
+	final CountDownLatch countDownLatch6 = new CountDownLatch(1);
+	tcpServer.send("ABC".getBytes(), serverLinks.get(serverLinks.size() - 1).getRemote()).doOnError(err -> {
+	    countDownLatch6.countDown();
+	    System.out.println(">>> server failed to send to " + serverLinks.get(serverLinks.size() - 1).getRemote());
+	}).doOnSuccess(result -> {
+	    countDownLatch6.countDown();
+	    System.out.println(">>> server send() to " + serverLinks.get(serverLinks.size() - 1).getRemote());
+	    System.out.println(">>> server send() took " + (System.currentTimeMillis() - now6));
+	}).subscribe();
+	try {
+	    countDownLatch6.await(5, TimeUnit.SECONDS);
+	} catch (InterruptedException e) {
+	    fail("server failed to send again");
+	}
+
+	long now7 = System.currentTimeMillis();
+	final CountDownLatch countDownLatch7 = new CountDownLatch(1);
+	tcpClient.send("123".getBytes(), clientLinks.get(clientLinks.size() - 1).getRemote()).doOnError(err -> {
+	    countDownLatch7.countDown();
+	    System.out.println(">>> client failed to send to " + clientLinks.get(clientLinks.size() - 1).getRemote());
+	}).doOnSuccess(result -> {
+	    countDownLatch7.countDown();
+	    System.out.println(">>> client send() to " + clientLinks.get(clientLinks.size() - 1).getRemote());
+	    System.out.println(">>> client send() took " + (System.currentTimeMillis() - now7));
+	}).subscribe();
+	try {
+	    countDownLatch7.await(5, TimeUnit.SECONDS);
+	} catch (InterruptedException e) {
+	    fail("client failed to send again");
 	}
 
 	System.out.println("...");

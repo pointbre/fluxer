@@ -1,6 +1,7 @@
 package com.github.pointbre.fluxer.core;
 
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
@@ -37,6 +38,7 @@ public interface Fluxer extends AutoCloseable {
     @AllArgsConstructor
     @Getter
     @ToString
+    @EqualsAndHashCode
     public class Endpoint {
 	@NonNull
 	private String ipAddress;
@@ -48,6 +50,7 @@ public interface Fluxer extends AutoCloseable {
     @AllArgsConstructor
     @Getter
     @ToString
+    @EqualsAndHashCode
     public class Link {
 	public enum State {
 	    CONNECTED, DISCONNECTED, NONE;
@@ -63,6 +66,7 @@ public interface Fluxer extends AutoCloseable {
     @AllArgsConstructor
     @Getter
     @ToString
+    @EqualsAndHashCode
     public class Message {
 	public enum Type {
 	    INBOUND, OUTBOUND;
