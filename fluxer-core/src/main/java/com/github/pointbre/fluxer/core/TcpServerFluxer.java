@@ -1,12 +1,13 @@
 package com.github.pointbre.fluxer.core;
 
-import com.github.pointbre.fluxer.core.Fluxer.Event;
+import org.springframework.statemachine.StateMachineEventResult.ResultType;
+
 import com.github.pointbre.fluxer.core.Fluxer.Result;
 
+import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.ChannelOption;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Sinks;
-import reactor.core.publisher.Sinks.One;
 import reactor.netty.ConnectionObserver;
 import reactor.netty.tcp.TcpServer;
 
@@ -74,7 +75,7 @@ public class TcpServerFluxer extends TcpFluxer {
 		    sendEventToStateMachine(Event.PROCESSED);
 		    Sinks.One<Result> resultSink = getResultSink(Event.START_REQUESTED);
 		    if (resultSink != null) {
-			resultSink.tryEmitValue(Result.PROCESSED);
+			resultSink.tryEmitValue(new Result(Result.Type.PROCESSED, "TcpServer successfully started at " + getIpAddress() + ":" + getPort()));
 		    }
 		    removeResultSink(Event.START_REQUESTED);
 		}, ex -> {
@@ -83,7 +84,7 @@ public class TcpServerFluxer extends TcpFluxer {
 		    sendEventToStateMachine(Event.FAILED);
 		    Sinks.One<Result> resultSink = getResultSink(Event.START_REQUESTED);
 		    if (resultSink != null) {
-			resultSink.tryEmitValue(Result.FAILED);
+			resultSink.tryEmitValue(new Result(Result.Type.FAILED, "TcpServer failed to start at " + getIpAddress() + ":" + getPort() + ", " +ex.getLocalizedMessage()));
 		    }
 		    removeResultSink(Event.START_REQUESTED);
 		});

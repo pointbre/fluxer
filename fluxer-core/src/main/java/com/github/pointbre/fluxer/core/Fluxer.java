@@ -30,8 +30,20 @@ public interface Fluxer extends AutoCloseable {
 	START_REQUESTED, STOP_REQUESTED, PROCESSED, FAILED;
     }
 
-    public enum Result {
-	PROCESSED, FAILED
+    @Value
+    @AllArgsConstructor
+    @Getter
+    @ToString
+    @EqualsAndHashCode
+    public class Result {
+	public enum Type {
+	    PROCESSED, FAILED
+	}
+	
+	@NonNull
+	private Type type;
+	@NonNull
+	private String description;
     }
 
     @Value
@@ -78,5 +90,17 @@ public interface Fluxer extends AutoCloseable {
 	private Link link;
 	@NonNull
 	private byte[] message;
+    }
+
+    @Value
+    @AllArgsConstructor
+    @Getter
+    @ToString
+    @EqualsAndHashCode(callSuper = false)
+    public class FluxerException extends Exception {
+	private static final long serialVersionUID = 7341500687389967346L;
+
+	@NonNull
+	private String description;
     }
 }

@@ -44,8 +44,8 @@ class TcpServerFluxerTest {
 	tcpServer.state()
 		.doOnError(error -> {
 		    fail("Shouldn't throw an error");
-		}).doOnNext(message -> {
-		    System.out.println("subscriber 1 | Server message received: " + message);
+		}).doOnNext(state -> {
+		    System.out.println("subscriber 1 | Server message received: " + state);
 		}).doOnComplete(new Runnable() {
 		    @Override
 		    public void run() {
@@ -73,7 +73,7 @@ class TcpServerFluxerTest {
 		.doOnError(error -> {
 		    fail("Shouldn't throw an error");
 		}).doOnNext(message -> {
-		    System.out.println("subscriber 1 | Server message received: " + ByteBufUtil.hexDump(message.getMessage()));
+		    System.out.println("subscriber 1 | Server message received: " + message);
 		}).doOnComplete(new Runnable() {
 		    @Override
 		    public void run() {
@@ -85,8 +85,8 @@ class TcpServerFluxerTest {
 	tcpClient.state()
 		.doOnError(error -> {
 		    fail("Shouldn't throw an error");
-		}).doOnNext(message -> {
-		    System.out.println("subscriber 1 | client message received: " + message);
+		}).doOnNext(state -> {
+		    System.out.println("subscriber 1 | client message received: " + state);
 		}).doOnComplete(new Runnable() {
 		    @Override
 		    public void run() {
@@ -113,7 +113,7 @@ class TcpServerFluxerTest {
 		.doOnError(error -> {
 		    fail("Shouldn't throw an error");
 		}).doOnNext(message -> {
-		    System.out.println("subscriber 1 | client message received: " + ByteBufUtil.hexDump(message.getMessage()));
+		    System.out.println("subscriber 1 | client message received: " + message);
 		}).doOnComplete(new Runnable() {
 		    @Override
 		    public void run() {
@@ -129,8 +129,7 @@ class TcpServerFluxerTest {
 	    System.out.println(System.currentTimeMillis() + ":Server failed to start at " + portNumber);
 	}).doOnSuccess(result -> {
 	    countDownLatch1.countDown();
-	    System.out.println(
-		    System.currentTimeMillis() + ":Server starts at " + portNumber);
+	    System.out.println(System.currentTimeMillis() + ":" + result);
 	    System.out.println("Server starting took " + (System.currentTimeMillis() - now1));
 	}).subscribe();
 	try {
@@ -146,8 +145,7 @@ class TcpServerFluxerTest {
 	    System.out.println(System.currentTimeMillis() + ":client failed to start at " + portNumber);
 	}).doOnSuccess(result -> {
 	    countDownLatch2.countDown();
-	    System.out.println(
-		    System.currentTimeMillis() + ":client starts at " + portNumber + " - result " + result);
+	    System.out.println(System.currentTimeMillis() + ":" + result);
 	    System.out.println("Client starting took " + (System.currentTimeMillis() - now2));
 	}).subscribe();
 	try {

@@ -73,8 +73,18 @@ public abstract class TcpFluxer implements Fluxer {
 
     abstract protected void createTcpConnection();
 
-    public TcpFluxer(String ipAddress, Integer port) throws Exception {
+    public TcpFluxer(String ipAddress, Integer port) throws FluxerException {
+	
+	if (ipAddress == null || ipAddress.isBlank()) {
+	    log.error("Invalid ip address: must not be null or blank");
+	    throw new FluxerException("Invalid ip address: must not be null or blank");
+	}
 
+	if (port <= 0 || port >= 65536) {
+	    log.error("Invalid port: must be >= 1 and <= 65535");
+	    throw new FluxerException("Invalid port: must be >= 1 and <= 65535");
+	}
+	
 	this.ipAddress = ipAddress;
 	this.port = port;
 
@@ -115,56 +125,60 @@ public abstract class TcpFluxer implements Fluxer {
 
 	// FIXME It'd be better to take state machine related implementation out of this
 	// class
-	fluxerMachineBuilder = StateMachineBuilder.builder();
-	fluxerMachineBuilder.configureConfiguration()
-		.withConfiguration()
-		.autoStartup(false);
+	try {
+	    fluxerMachineBuilder = StateMachineBuilder.builder();
+	    fluxerMachineBuilder.configureConfiguration()
+	    	.withConfiguration()
+	    	.autoStartup(false);
 
-	fluxerMachineBuilder.configureStates()
-		.withStates()
-		.initial(State.STOPPED, publishStateChange())
-		.state(State.STOPPED)
-		.state(State.STARTED)
-		.state(State.STARTING, processStartRequest())
-		.state(State.STOPPING, processStopRequest());
+	    fluxerMachineBuilder.configureStates()
+	    	.withStates()
+	    	.initial(State.STOPPED, publishStateChange())
+	    	.state(State.STOPPED)
+	    	.state(State.STARTED)
+	    	.state(State.STARTING, processStartRequest())
+	    	.state(State.STOPPING, processStopRequest());
 
-	fluxerMachineBuilder.configureTransitions()
-		.withExternal()
-		.source(State.STOPPED)
-		.event(Event.START_REQUESTED)
-		.target(State.STARTING)
-		.action(publishStateChange())
-		.and()
-		.withExternal()
-		.source(State.STARTING)
-		.event(Event.PROCESSED)
-		.target(State.STARTED)
-		.action(publishStateChange())
-		.and()
-		.withExternal()
-		.source(State.STARTING)
-		.event(Event.FAILED)
-		.target(State.STOPPED)
-		.action(publishStateChange())
-		.and()
-		.withExternal()
-		.source(State.STARTED)
-		.event(Event.STOP_REQUESTED)
-		.target(State.STOPPING)
-		.action(publishStateChange())
-		.and()
-		.withExternal()
-		.source(State.STOPPING)
-		.event(Event.PROCESSED)
-		.target(State.STOPPED)
-		.action(publishStateChange())
-		.and()
-		// Currently this transition is not used
-		.withExternal()
-		.source(State.STOPPING)
-		.event(Event.FAILED)
-		.target(State.STOPPED)
-		.action(publishStateChange());
+	    fluxerMachineBuilder.configureTransitions()
+	    	.withExternal()
+	    	.source(State.STOPPED)
+	    	.event(Event.START_REQUESTED)
+	    	.target(State.STARTING)
+	    	.action(publishStateChange())
+	    	.and()
+	    	.withExternal()
+	    	.source(State.STARTING)
+	    	.event(Event.PROCESSED)
+	    	.target(State.STARTED)
+	    	.action(publishStateChange())
+	    	.and()
+	    	.withExternal()
+	    	.source(State.STARTING)
+	    	.event(Event.FAILED)
+	    	.target(State.STOPPED)
+	    	.action(publishStateChange())
+	    	.and()
+	    	.withExternal()
+	    	.source(State.STARTED)
+	    	.event(Event.STOP_REQUESTED)
+	    	.target(State.STOPPING)
+	    	.action(publishStateChange())
+	    	.and()
+	    	.withExternal()
+	    	.source(State.STOPPING)
+	    	.event(Event.PROCESSED)
+	    	.target(State.STOPPED)
+	    	.action(publishStateChange())
+	    	.and()
+	    	// Currently this transition is not used
+	    	.withExternal()
+	    	.source(State.STOPPING)
+	    	.event(Event.FAILED)
+	    	.target(State.STOPPED)
+	    	.action(publishStateChange());
+	} catch (Exception e) {
+	    throw new FluxerException(e.getLocalizedMessage());
+	}
 
 	fluxerMachine = fluxerMachineBuilder.build();
 	fluxerMachine.addStateListener(new StateMachineListener<Fluxer.State, Fluxer.Event>() {
@@ -272,12 +286,12 @@ public abstract class TcpFluxer implements Fluxer {
 		.subscribe(results -> {
 		    System.out.println("Sending START_REQUESTED --> " + results);
 		    if (!isSentEventAccepted(results)) {
-			resultSink.tryEmitValue(Result.FAILED);
+			resultSink.tryEmitValue(new Result(Result.Type.FAILED, "The request can't be accepted as it's currently " + fluxerMachine.getState().getId()));
 			removeResultSink(Event.START_REQUESTED);
 		    }
 		}, error -> {
 //		    System.out.println(System.currentTimeMillis() + ": doOnError - 1");
-		    resultSink.tryEmitValue(Result.FAILED);
+		    resultSink.tryEmitValue(new Result(Result.Type.FAILED, error.getLocalizedMessage()));
 		    removeResultSink(Event.START_REQUESTED);
 //		    System.out.println(System.currentTimeMillis() + ": doOnError - 2");
 		});
@@ -296,12 +310,12 @@ public abstract class TcpFluxer implements Fluxer {
 		.subscribe(results -> {
 		    System.out.println("Sending STOP_REQUESTED --> " + results);
 		    if (!isSentEventAccepted(results)) {
-			resultSink.tryEmitValue(Result.FAILED);
+			resultSink.tryEmitValue(new Result(Result.Type.FAILED, "The request can't be accepted as it's currently " + fluxerMachine.getState().getId()));
 			removeResultSink(Event.STOP_REQUESTED);
 		    }
 		}, error -> {
 //		    System.out.println(System.currentTimeMillis() + ": doOnError - 1");
-		    resultSink.tryEmitValue(Result.FAILED);
+		    resultSink.tryEmitValue(new Result(Result.Type.FAILED, error.getLocalizedMessage()));
 		    removeResultSink(Event.STOP_REQUESTED);
 //		    System.out.println(System.currentTimeMillis() + ": doOnError - 2");
 		});
@@ -332,16 +346,20 @@ public abstract class TcpFluxer implements Fluxer {
 	    }
 
 	    if (linkFound) {
+		InetSocketAddress localAddress = (InetSocketAddress) channel.localAddress();
+		final Endpoint local = new Endpoint(localAddress.getAddress().getHostAddress(), localAddress.getPort());
+		
 		channel.writeAndFlush(Unpooled.wrappedBuffer(message))
 			.addListener(new ChannelFutureListener() {
 			    @Override
 			    public void operationComplete(ChannelFuture future) throws Exception {
 //				System.out.println("writing to " + remote + " completed: " + ByteBufUtil.hexDump(message));
-				resultSink.tryEmitValue(Result.PROCESSED);
+				resultSink.tryEmitValue(new Result(Result.Type.PROCESSED, "Successfully sent to " + remote + ":" + ByteBufUtil.hexDump(message)));
+				emitMessage(local, remote, message);
 			    }
 			});
 	    } else {
-		resultSink.tryEmitValue(Result.FAILED);
+		resultSink.tryEmitValue(new Result(Result.Type.FAILED, "Matching link is not found: " + remote));
 	    }
 	}
 
@@ -434,11 +452,22 @@ public abstract class TcpFluxer implements Fluxer {
     }
 
 //
-    protected void emitInboundMessage(Connection connection, byte[] receivedMessage) {
+    protected void emitMessage(Connection connection, byte[] receivedMessage) {
 	Link link = getLinkFromConnection((InetSocketAddress) connection.channel().localAddress(),
 		(InetSocketAddress) connection.channel().remoteAddress(), Link.State.NONE);
 //	System.out.println("inbound updated: " + link + " --> " + ByteBufUtil.hexDump(receivedMessage));
 	messageSink.tryEmitNext(new Message(Type.INBOUND, link, receivedMessage));
+    }
+    
+    protected void emitMessage(Endpoint local, Endpoint remote, byte[] receivedMessage) {
+	Link link = new Link(Link.State.NONE, local, remote);
+//	System.out.println("inbound updated: " + link + " --> " + ByteBufUtil.hexDump(receivedMessage));
+	messageSink.tryEmitNext(new Message(Type.OUTBOUND, link, receivedMessage));
+    }
+    
+    private Link getLinkFromConnection(InetSocketAddress local, InetSocketAddress remote, Link.State state) {
+	return new Link(state, new Endpoint(local.getAddress().getHostAddress(), local.getPort()),
+		new Endpoint(remote.getAddress().getHostAddress(), remote.getPort()));
     }
 
     private Action<State, Event> publishStateChange() {
@@ -480,10 +509,9 @@ public abstract class TcpFluxer implements Fluxer {
 		sendEventToStateMachine(Event.PROCESSED);
 
 		@SuppressWarnings("unchecked")
-		Sinks.One<Result> resultSink = (One<Result>) (fluxerMachine.getExtendedState().getVariables()
-			.get(Event.STOP_REQUESTED));
+		Sinks.One<Result> resultSink = (One<Result>) (fluxerMachine.getExtendedState().getVariables().get(Event.STOP_REQUESTED));
 		if (resultSink != null) {
-		    resultSink.tryEmitValue(Result.PROCESSED);
+		    resultSink.tryEmitValue(new Result(Result.Type.PROCESSED, "Successfully stopped"));
 		    fluxerMachine.getExtendedState().getVariables().remove(Event.STOP_REQUESTED);
 		}
 	    }
@@ -513,7 +541,7 @@ public abstract class TcpFluxer implements Fluxer {
 //			System.out.println(ByteBufUtil.hexDump(buf) + " from " + connection + "???");
 //			System.out.println(connection.channel().localAddress().toString());
 //			System.out.println(connection.channel().remoteAddress().toString());
-			emitInboundMessage(connection, buf);
+			emitMessage(connection, buf);
 		    });
 		}).doOnError(e -> {
 //		    System.out.println("in doOnError " + e);
@@ -532,27 +560,6 @@ public abstract class TcpFluxer implements Fluxer {
 		});
 	    }
 	};
-    }
-
-    private Link getLinkFromConnection(InetSocketAddress local, InetSocketAddress remote, Link.State state) {
-	return new Link(state, new Endpoint(local.getAddress().getHostAddress(), local.getPort()),
-		new Endpoint(remote.getAddress().getHostAddress(), remote.getPort()));
-    }
-
-    private boolean validate() {
-	// Null or blank
-	if (ipAddress == null || ipAddress.isBlank()) {
-	    log.error("Invalid host: must not be null or blank");
-	    return false;
-	}
-
-	// Not valid ip address
-	if (port <= 0 || port >= 65536) {
-	    log.error("Invalid port: must be >= 1 and <= 65535");
-	    return false;
-	}
-
-	return true;
     }
 
     private boolean isSameLink(@NonNull Channel channel, @NonNull Endpoint remote) {

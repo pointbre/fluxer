@@ -1,17 +1,8 @@
 package com.github.pointbre.fluxer.core;
 
-import java.io.IOException;
-
-import com.github.pointbre.fluxer.core.Fluxer.Event;
-import com.github.pointbre.fluxer.core.Fluxer.Result;
-
 import io.netty.channel.ChannelOption;
-import io.netty.handler.flush.FlushConsolidationHandler;
 import lombok.extern.slf4j.Slf4j;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
-import reactor.core.publisher.Sinks.One;
 import reactor.netty.tcp.TcpClient;
 
 @Slf4j
@@ -70,7 +61,7 @@ public class TcpClientFluxer extends TcpFluxer {
 		    sendEventToStateMachine(Event.PROCESSED);
 		    Sinks.One<Result> resultSink = getResultSink(Event.START_REQUESTED);
 		    if (resultSink != null) {
-			resultSink.tryEmitValue(Result.PROCESSED);
+			resultSink.tryEmitValue(new Result(Result.Type.PROCESSED, "TcpClient successfully started at " + getIpAddress() + ":" + getPort()));
 		    }
 		    removeResultSink(Event.START_REQUESTED);
 		}, ex -> {
@@ -80,7 +71,7 @@ public class TcpClientFluxer extends TcpFluxer {
 		    sendEventToStateMachine(Event.FAILED);
 		    Sinks.One<Result> resultSink = getResultSink(Event.START_REQUESTED);
 		    if (resultSink != null) {
-			resultSink.tryEmitValue(Result.FAILED);
+			resultSink.tryEmitValue(new Result(Result.Type.FAILED, "TcpClient failed to start at " + getIpAddress() + ":" + getPort() + ", " +ex.getLocalizedMessage()));
 		    }
 		    removeResultSink(Event.START_REQUESTED);
 		});
