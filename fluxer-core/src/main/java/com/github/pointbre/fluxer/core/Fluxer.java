@@ -10,16 +10,48 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 public interface Fluxer extends AutoCloseable {
+    /**
+     * Starts up Fluxer
+     * 
+     * @return {@link Mono} of {@link Result}
+     */
     Mono<Result> start();
 
+    /**
+     * Stops Fluxer
+     * 
+     * @return {@link Mono} of {@link Result}
+     */
     Mono<Result> stop();
 
-    Mono<Result> send(byte[] message, Endpoint remote);
+    /**
+     * Send the byte array to the remote {@link EndPoint}
+     * 
+     * @param message
+     * @param remote
+     * @return
+     */
+    Mono<Result> send(byte[] message, EndPoint remote);
 
+    /**
+     * Provides the stream of {@link State} changes
+     * 
+     * @return {@link Flux} of {@link State}
+     */
     Flux<State> state();
 
+    /**
+     * Provides the stream of {@link Link} changes
+     * 
+     * @return {@link Flux} of {@link Link}
+     */
     Flux<Link> link();
 
+    /**
+     * Provides the stream of inbound and outbound {@link Message} changes
+     * 
+     * @return {@link Flux} of {@link Message}
+     */
     Flux<Message> message();
 
     public enum State {
@@ -51,7 +83,7 @@ public interface Fluxer extends AutoCloseable {
     @Getter
     @ToString
     @EqualsAndHashCode
-    public class Endpoint {
+    public class EndPoint {
 	@NonNull
 	private String ipAddress;
 	@NonNull
@@ -70,8 +102,8 @@ public interface Fluxer extends AutoCloseable {
 
 	@NonNull
 	private State state;
-	private Endpoint local;
-	private Endpoint remote;
+	private EndPoint local;
+	private EndPoint remote;
     }
 
     @Value

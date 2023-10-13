@@ -58,7 +58,8 @@ public class TcpClientFluxer extends TcpFluxer {
 		    this.disposableChannel = connection;
 		    System.out.println("client connect() returned, will send PROCESSED");
 //		    emitStatus(State.STARTED);
-		    sendEventToStateMachine(Event.PROCESSED);
+		    // TODO call subscribe() like processStopRequest()
+		    sendEvent(Event.PROCESSED);
 		    Sinks.One<Result> resultSink = getResultSink(Event.START_REQUESTED);
 		    if (resultSink != null) {
 			resultSink.tryEmitValue(new Result(Result.Type.PROCESSED, "TcpClient successfully started at " + getIpAddress() + ":" + getPort()));
@@ -68,7 +69,8 @@ public class TcpClientFluxer extends TcpFluxer {
 //					emitStartException(resultSink, "Failed to connect: " + ex.getLocalizedMessage());
 		    System.out.println("client connect() error: " + ex.getMessage());
 //		    emitStatus(State.STOPPED);
-		    sendEventToStateMachine(Event.FAILED);
+		    // TODO call subscribe() like processStopRequest()
+		    sendEvent(Event.FAILED);
 		    Sinks.One<Result> resultSink = getResultSink(Event.START_REQUESTED);
 		    if (resultSink != null) {
 			resultSink.tryEmitValue(new Result(Result.Type.FAILED, "TcpClient failed to start at " + getIpAddress() + ":" + getPort() + ", " +ex.getLocalizedMessage()));

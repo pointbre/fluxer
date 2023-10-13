@@ -6,7 +6,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import com.github.pointbre.fluxer.core.Fluxer;
-import com.github.pointbre.fluxer.core.Fluxer.Endpoint;
+import com.github.pointbre.fluxer.core.Fluxer.EndPoint;
 import com.github.pointbre.fluxer.core.Fluxer.Link;
 import com.github.pointbre.fluxer.core.Fluxer.Message;
 import com.github.pointbre.fluxer.core.TcpClientFluxer;

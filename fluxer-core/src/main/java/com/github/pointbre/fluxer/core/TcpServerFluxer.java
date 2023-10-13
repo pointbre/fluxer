@@ -72,7 +72,8 @@ public class TcpServerFluxer extends TcpFluxer {
 		    disposableChannel = disposableServer;
 		    System.out.println("server bind() returned");
 //		    emitStatus(State.STARTED);
-		    sendEventToStateMachine(Event.PROCESSED);
+		    // TODO call subscribe() like processStopRequest()
+		    sendEvent(Event.PROCESSED);
 		    Sinks.One<Result> resultSink = getResultSink(Event.START_REQUESTED);
 		    if (resultSink != null) {
 			resultSink.tryEmitValue(new Result(Result.Type.PROCESSED, "TcpServer successfully started at " + getIpAddress() + ":" + getPort()));
@@ -81,7 +82,8 @@ public class TcpServerFluxer extends TcpFluxer {
 		}, ex -> {
 		    System.out.println("server bind() error: " + ex.getMessage());
 //		    emitStatus(State.STOPPED);
-		    sendEventToStateMachine(Event.FAILED);
+		    // TODO call subscribe() like processStopRequest()
+		    sendEvent(Event.FAILED);
 		    Sinks.One<Result> resultSink = getResultSink(Event.START_REQUESTED);
 		    if (resultSink != null) {
 			resultSink.tryEmitValue(new Result(Result.Type.FAILED, "TcpServer failed to start at " + getIpAddress() + ":" + getPort() + ", " +ex.getLocalizedMessage()));

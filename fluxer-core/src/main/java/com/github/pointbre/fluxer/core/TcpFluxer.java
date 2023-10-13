@@ -49,32 +49,19 @@ import reactor.netty.NettyOutbound;
 import reactor.util.concurrent.Queues;
 
 @Slf4j
-public abstract class TcpFluxer implements Fluxer {
+public abstract class TcpFluxer extends AbstractFluxer {
 
     private final String ipAddress;
     private final Integer port;
-
-    private Many<State> stateSink;
-    private Flux<State> stateFlux;
-
-    private Many<Link> linkSink;
-    private Flux<Link> linkFlux;
-
-    private Many<Message> messageSink;
-    private Flux<Message> messageFlux;
-
-    private Builder<State, Event> fluxerMachineBuilder;
-    private StateMachine<State, Event> fluxerMachine;
 
     protected BiFunction<NettyInbound, NettyOutbound, Publisher<Void>> handler;
     protected DisposableChannel disposableChannel;
     protected EventExecutor executor;
     protected ChannelGroup group;
 
-    abstract protected void createTcpConnection();
+    public TcpFluxer(String ipAddress, Integer port) throws Exception {
+	super();
 
-    public TcpFluxer(String ipAddress, Integer port) throws FluxerException {
-	
 	if (ipAddress == null || ipAddress.isBlank()) {
 	    log.error("Invalid ip address: must not be null or blank");
 	    throw new FluxerException("Invalid ip address: must not be null or blank");
@@ -84,216 +71,26 @@ public abstract class TcpFluxer implements Fluxer {
 	    log.error("Invalid port: must be >= 1 and <= 65535");
 	    throw new FluxerException("Invalid port: must be >= 1 and <= 65535");
 	}
-	
+
 	this.ipAddress = ipAddress;
 	this.port = port;
-
-	stateSink = Sinks
-		.many()
-		.multicast()
-		.<State>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
-	stateFlux = stateSink
-		.asFlux()
-		.publishOn(Schedulers.boundedElastic())
-		.doOnSubscribe(sub -> {
-//		    System.out.println("A new subscriber to status flux: " + sub);
-		})
-		.log();
-
-	linkSink = Sinks
-		.many()
-		.multicast()
-		.<Link>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
-	linkFlux = linkSink
-		.asFlux()
-		.publishOn(Schedulers.boundedElastic())
-		.doOnSubscribe(sub -> {
-//		    System.out.println("A new subscriber to link flux: " + sub);
-		})
-		.log();
-
-	messageSink = Sinks
-		.many()
-		.multicast()
-		.<Message>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
-	messageFlux = messageSink
-		.asFlux()
-		.publishOn(Schedulers.boundedElastic()).doOnSubscribe(sub -> {
-//		    System.out.println("A new subscriber to message flux: " + sub);
-		})
-		.log();
-
-	// FIXME It'd be better to take state machine related implementation out of this
-	// class
-	try {
-	    fluxerMachineBuilder = StateMachineBuilder.builder();
-	    fluxerMachineBuilder.configureConfiguration()
-	    	.withConfiguration()
-	    	.autoStartup(false);
-
-	    fluxerMachineBuilder.configureStates()
-	    	.withStates()
-	    	.initial(State.STOPPED, publishStateChange())
-	    	.state(State.STOPPED)
-	    	.state(State.STARTED)
-	    	.state(State.STARTING, processStartRequest())
-	    	.state(State.STOPPING, processStopRequest());
-
-	    fluxerMachineBuilder.configureTransitions()
-	    	.withExternal()
-	    	.source(State.STOPPED)
-	    	.event(Event.START_REQUESTED)
-	    	.target(State.STARTING)
-	    	.action(publishStateChange())
-	    	.and()
-	    	.withExternal()
-	    	.source(State.STARTING)
-	    	.event(Event.PROCESSED)
-	    	.target(State.STARTED)
-	    	.action(publishStateChange())
-	    	.and()
-	    	.withExternal()
-	    	.source(State.STARTING)
-	    	.event(Event.FAILED)
-	    	.target(State.STOPPED)
-	    	.action(publishStateChange())
-	    	.and()
-	    	.withExternal()
-	    	.source(State.STARTED)
-	    	.event(Event.STOP_REQUESTED)
-	    	.target(State.STOPPING)
-	    	.action(publishStateChange())
-	    	.and()
-	    	.withExternal()
-	    	.source(State.STOPPING)
-	    	.event(Event.PROCESSED)
-	    	.target(State.STOPPED)
-	    	.action(publishStateChange())
-	    	.and()
-	    	// Currently this transition is not used
-	    	.withExternal()
-	    	.source(State.STOPPING)
-	    	.event(Event.FAILED)
-	    	.target(State.STOPPED)
-	    	.action(publishStateChange());
-	} catch (Exception e) {
-	    throw new FluxerException(e.getLocalizedMessage());
-	}
-
-	fluxerMachine = fluxerMachineBuilder.build();
-	fluxerMachine.addStateListener(new StateMachineListener<Fluxer.State, Fluxer.Event>() {
-
-	    @Override
-	    public void transitionStarted(Transition<State, Event> transition) {
-		// TODO Auto-generated method stub
-
-	    }
-
-	    @Override
-	    public void transitionEnded(Transition<State, Event> transition) {
-		// TODO Auto-generated method stub
-
-	    }
-
-	    @Override
-	    public void transition(Transition<State, Event> transition) {
-		// TODO Auto-generated method stub
-
-	    }
-
-	    @Override
-	    public void stateMachineStopped(StateMachine<State, Event> stateMachine) {
-		// TODO Auto-generated method stub
-
-	    }
-
-	    @Override
-	    public void stateMachineStarted(StateMachine<State, Event> stateMachine) {
-		// TODO Auto-generated method stub
-
-	    }
-
-	    @Override
-	    public void stateMachineError(StateMachine<State, Event> stateMachine, Exception exception) {
-		// TODO Auto-generated method stub
-		System.out.println("stateMachineError: " + exception);
-	    }
-
-	    @Override
-	    public void stateExited(org.springframework.statemachine.state.State<State, Event> state) {
-		// TODO Auto-generated method stub
-
-	    }
-
-	    @Override
-	    public void stateEntered(org.springframework.statemachine.state.State<State, Event> state) {
-		// TODO Auto-generated method stub
-
-	    }
-
-	    @Override
-	    public void stateContext(StateContext<State, Event> stateContext) {
-		// TODO Auto-generated method stub
-
-	    }
-
-	    @Override
-	    public void stateChanged(org.springframework.statemachine.state.State<State, Event> from,
-		    org.springframework.statemachine.state.State<State, Event> to) {
-		System.out.println("stateChanged: " + (from != null ? from.getIds() : "") + " --> " + to.getIds());
-
-	    }
-
-	    @Override
-	    public void extendedStateChanged(Object key, Object value) {
-		// TODO Auto-generated method stub
-
-	    }
-
-	    @Override
-	    public void eventNotAccepted(org.springframework.messaging.Message<Event> event) {
-		System.out.println("eventNotAccepted: " + event);
-	    }
-	});
-//	System.out.println("state machine starting");
-
-	fluxerMachine.startReactively().doOnError(err -> {
-//	    System.out.println("state machine start failed");
-	}).doOnSuccess(__ -> {
-//	    System.out.println("state machine start is done");
-	}).subscribe();
     }
 
     @Override
     public Mono<Result> start() {
-
 	Sinks.One<Result> resultSink = Sinks.one();
 
-//	org.springframework.statemachine.state.State<State, Event>  currentState = fluxerMachine.getState();
-//	System.out.println(currentState);
-//	if (fluxerMachine.getState().getId().equals(State.STARTED)) {
-//	    resultSink.tryEmitValue(Result.PROCESSED);
-//	}
-//	else if (fluxerMachine.getState().getId().equals(State.STARTING)) {
-//	    
-//	}
-//	else {
-//	    
-//	}
-
-	fluxerMachine.getExtendedState().getVariables().put(Event.START_REQUESTED, resultSink);
-	fluxerMachine.sendEventCollect(Mono.just(MessageBuilder.withPayload(Event.START_REQUESTED).build()))
+	putResultSink(Event.START_REQUESTED, resultSink);
+	sendEvent(Event.START_REQUESTED)
 		.subscribe(results -> {
-		    System.out.println("Sending START_REQUESTED --> " + results);
-		    if (!isSentEventAccepted(results)) {
-			resultSink.tryEmitValue(new Result(Result.Type.FAILED, "The request can't be accepted as it's currently " + fluxerMachine.getState().getId()));
+		    if (!isEventAccepted(results)) {
+			resultSink.tryEmitValue(new Result(Result.Type.FAILED,
+				"The request can't be accepted as it's currently " + getState()));
 			removeResultSink(Event.START_REQUESTED);
 		    }
 		}, error -> {
-//		    System.out.println(System.currentTimeMillis() + ": doOnError - 1");
 		    resultSink.tryEmitValue(new Result(Result.Type.FAILED, error.getLocalizedMessage()));
 		    removeResultSink(Event.START_REQUESTED);
-//		    System.out.println(System.currentTimeMillis() + ": doOnError - 2");
 		});
 
 	return resultSink.asMono();
@@ -301,36 +98,26 @@ public abstract class TcpFluxer implements Fluxer {
 
     @Override
     public Mono<Result> stop() {
-
 	Sinks.One<Result> resultSink = Sinks.one();
 
-	fluxerMachine.getExtendedState().getVariables().put(Event.STOP_REQUESTED, resultSink);
-
-	fluxerMachine.sendEventCollect(Mono.just(MessageBuilder.withPayload(Event.STOP_REQUESTED).build()))
+	putResultSink(Event.STOP_REQUESTED, resultSink);
+	sendEvent(Event.STOP_REQUESTED)
 		.subscribe(results -> {
-		    System.out.println("Sending STOP_REQUESTED --> " + results);
-		    if (!isSentEventAccepted(results)) {
-			resultSink.tryEmitValue(new Result(Result.Type.FAILED, "The request can't be accepted as it's currently " + fluxerMachine.getState().getId()));
+		    if (!isEventAccepted(results)) {
+			resultSink.tryEmitValue(new Result(Result.Type.FAILED,
+				"The request can't be accepted as it's currently " + getState()));
 			removeResultSink(Event.STOP_REQUESTED);
 		    }
 		}, error -> {
-//		    System.out.println(System.currentTimeMillis() + ": doOnError - 1");
 		    resultSink.tryEmitValue(new Result(Result.Type.FAILED, error.getLocalizedMessage()));
 		    removeResultSink(Event.STOP_REQUESTED);
-//		    System.out.println(System.currentTimeMillis() + ": doOnError - 2");
 		});
 
 	return resultSink.asMono();
     }
 
     @Override
-    public Mono<Result> send(byte[] message, Endpoint remote) {
-	// If writing to multiple links needs to be allowed,
-	// - Change isSameLink() to support wildcard or regex or something else
-	// - Return a new future created from multiple ChannelFuture
-	// - See
-	// https://stackoverflow.com/questions/10503586/writing-to-all-but-one-in-a-tcp-netty-channelgroup
-
+    public Mono<Result> send(byte[] message, EndPoint remote) {
 	Sinks.One<Result> resultSink = Sinks.one();
 
 	if (group != null) {
@@ -347,14 +134,14 @@ public abstract class TcpFluxer implements Fluxer {
 
 	    if (linkFound) {
 		InetSocketAddress localAddress = (InetSocketAddress) channel.localAddress();
-		final Endpoint local = new Endpoint(localAddress.getAddress().getHostAddress(), localAddress.getPort());
-		
+		final EndPoint local = new EndPoint(localAddress.getAddress().getHostAddress(), localAddress.getPort());
+
 		channel.writeAndFlush(Unpooled.wrappedBuffer(message))
 			.addListener(new ChannelFutureListener() {
 			    @Override
 			    public void operationComplete(ChannelFuture future) throws Exception {
-//				System.out.println("writing to " + remote + " completed: " + ByteBufUtil.hexDump(message));
-				resultSink.tryEmitValue(new Result(Result.Type.PROCESSED, "Successfully sent to " + remote + ":" + ByteBufUtil.hexDump(message)));
+				resultSink.tryEmitValue(new Result(Result.Type.PROCESSED,
+					"Successfully sent to " + remote + ":" + ByteBufUtil.hexDump(message)));
 				emitMessage(local, remote, message);
 			    }
 			});
@@ -366,60 +153,6 @@ public abstract class TcpFluxer implements Fluxer {
 	return resultSink.asMono();
     }
 
-    @Override
-    public Flux<State> state() {
-	return stateFlux;
-    }
-
-    @Override
-    public Flux<Link> link() {
-	return linkFlux;
-    }
-
-    @Override
-    public Flux<Message> message() {
-	return messageFlux;
-    }
-
-    @Override
-    public void close() throws Exception {
-	System.out.println("close() started");
-
-	closeConnections();
-
-	if (stateSink != null) {
-	    stateSink.tryEmitComplete();
-	}
-	if (linkSink != null) {
-	    linkSink.tryEmitComplete();
-	}
-	if (messageSink != null) {
-	    messageSink.tryEmitComplete();
-	}
-
-	final CountDownLatch countDownLatch5 = new CountDownLatch(1);
-	if (fluxerMachine != null) {
-	    fluxerMachine.stopReactively().doOnError(err -> {
-//		System.out.println("state machine stop failed");
-		countDownLatch5.countDown();
-	    }).doOnSuccess(__ -> {
-		System.out.println("state machine stop is done");
-		countDownLatch5.countDown();
-	    }).subscribe();
-	} else {
-//	    System.out.println("state machine is null");
-	    countDownLatch5.countDown();
-	}
-	try {
-	    countDownLatch5.await(5, TimeUnit.SECONDS);
-	} catch (InterruptedException e) {
-//	    System.out.println("error");
-	}
-	fluxerMachine = null;
-
-	System.out.println("close() done");
-    }
-
     public String getIpAddress() {
 	return ipAddress;
     }
@@ -428,63 +161,9 @@ public abstract class TcpFluxer implements Fluxer {
 	return port;
     }
 
-    @SuppressWarnings("unchecked")
-    protected Sinks.One<Result> getResultSink(Event event) {
-	return (One<Result>) (fluxerMachine.getExtendedState().getVariables().get(event));
-    }
+    abstract protected void createTcpConnection();
 
-    protected void removeResultSink(Event event) {
-	fluxerMachine.getExtendedState().getVariables().remove(event);
-    }
-
-    protected void sendEventToStateMachine(Event eventToSend) {
-	fluxerMachine.sendEvent(
-		Mono.just(MessageBuilder.withPayload(eventToSend).build()))
-		.subscribe(result -> {
-		});
-    }
-    
-    private void emitState(State state)
-    {
-	stateSink.tryEmitNext(state);
-    }
-
-    protected void emitLink(Connection connection, Link.State state) {
-	Link link = getLinkFromConnection((InetSocketAddress) connection.channel().localAddress(),
-		(InetSocketAddress) connection.channel().remoteAddress(), state);
-//	System.out.println("link updated: " + newLink + " --> " + state.toString());
-	linkSink.tryEmitNext(link);
-    }
-
-//
-    protected void emitMessage(Connection connection, byte[] receivedMessage) {
-	Link link = getLinkFromConnection((InetSocketAddress) connection.channel().localAddress(),
-		(InetSocketAddress) connection.channel().remoteAddress(), Link.State.NONE);
-//	System.out.println("inbound updated: " + link + " --> " + ByteBufUtil.hexDump(receivedMessage));
-	messageSink.tryEmitNext(new Message(Type.INBOUND, link, receivedMessage));
-    }
-    
-    protected void emitMessage(Endpoint local, Endpoint remote, byte[] receivedMessage) {
-	Link link = new Link(Link.State.NONE, local, remote);
-//	System.out.println("inbound updated: " + link + " --> " + ByteBufUtil.hexDump(receivedMessage));
-	messageSink.tryEmitNext(new Message(Type.OUTBOUND, link, receivedMessage));
-    }
-    
-    private Link getLinkFromConnection(InetSocketAddress local, InetSocketAddress remote, Link.State state) {
-	return new Link(state, new Endpoint(local.getAddress().getHostAddress(), local.getPort()),
-		new Endpoint(remote.getAddress().getHostAddress(), remote.getPort()));
-    }
-
-    private Action<State, Event> publishStateChange() {
-	return new Action<Fluxer.State, Fluxer.Event>() {
-	    @Override
-	    public void execute(StateContext<State, Event> context) {
-		emitState(context.getTransition().getTarget().getId());
-	    }
-	};
-    }
-
-    private Action<State, Event> processStartRequest() {
+    protected Action<State, Event> processStartRequest() {
 	return new Action<State, Event>() {
 
 	    @Override
@@ -499,32 +178,130 @@ public abstract class TcpFluxer implements Fluxer {
 	};
     }
 
-    private Action<State, Event> processStopRequest() {
+    protected Action<State, Event> processStopRequest() {
 	return new Action<State, Event>() {
 
 	    @Override
 	    public void execute(StateContext<State, Event> context) {
-		System.out.println("processStopRequest-start");
+		closeLinks();
 
-		closeConnections();
-		System.out.println("processStopRequest-done, will send PROCESSED");
+		Sinks.One<Result> resultSink = getResultSink(Event.STOP_REQUESTED);
 
-		// What do I do if stopping doesn't work well?
-		sendEventToStateMachine(Event.PROCESSED);
-
-		@SuppressWarnings("unchecked")
-		Sinks.One<Result> resultSink = (One<Result>) (fluxerMachine.getExtendedState().getVariables().get(Event.STOP_REQUESTED));
-		if (resultSink != null) {
-		    resultSink.tryEmitValue(new Result(Result.Type.PROCESSED, "Successfully stopped"));
-		    fluxerMachine.getExtendedState().getVariables().remove(Event.STOP_REQUESTED);
-		}
+		sendEvent(Event.PROCESSED)
+			.subscribe(results -> {
+			    if (isEventAccepted(results)) {
+				if (resultSink != null) {
+				    resultSink.tryEmitValue(new Result(Result.Type.PROCESSED, "Successfully stopped"));
+				    removeResultSink(Event.STOP_REQUESTED);
+				}
+			    } else {
+				if (resultSink != null) {
+				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
+					    "The request can't be accepted as it's currently " + getState()));
+				    removeResultSink(Event.STOP_REQUESTED);
+				}
+			    }
+			}, error -> {
+			    if (resultSink != null) {
+				resultSink.tryEmitValue(new Result(Result.Type.FAILED, error.getLocalizedMessage()));
+				removeResultSink(Event.STOP_REQUESTED);
+			    }
+			});
 	    }
 	};
     }
 
-    private boolean isSentEventAccepted(List<StateMachineEventResult<State, Event>> results) {
-	return results.stream()
-		.anyMatch(result -> result.getResultType().equals(ResultType.ACCEPTED));
+    protected void closeLinks() {
+	final CountDownLatch countDownLatch1 = new CountDownLatch(1);
+	if (disposableChannel != null) {
+	    disposableChannel.dispose();
+	    disposableChannel
+		    .onDispose()
+		    .doOnError(err -> {
+			countDownLatch1.countDown();
+		    })
+		    .doOnSuccess(__ -> {
+			System.out.println("1. disposableChannel close done");
+			countDownLatch1.countDown();
+		    })
+		    .subscribe();
+	} else {
+	    countDownLatch1.countDown();
+	}
+	try {
+	    countDownLatch1.await(5, TimeUnit.SECONDS);
+	} catch (InterruptedException e) {
+	}
+
+	final CountDownLatch countDownLatch2 = new CountDownLatch(1);
+	if (group != null) {
+	    group.disconnect().addListener(new ChannelGroupFutureListener() {
+		@Override
+		public void operationComplete(ChannelGroupFuture future) throws Exception {
+		    System.out.println("2. group disconnect done");
+		    countDownLatch2.countDown();
+		}
+	    });
+	} else {
+	    countDownLatch2.countDown();
+	}
+	try {
+	    countDownLatch2.await(5, TimeUnit.SECONDS);
+	} catch (InterruptedException e) {
+	}
+
+	final CountDownLatch countDownLatch3 = new CountDownLatch(1);
+	if (group != null) {
+	    group.close().addListener(new ChannelGroupFutureListener() {
+		@Override
+		public void operationComplete(ChannelGroupFuture future) throws Exception {
+		    countDownLatch3.countDown();
+		}
+	    });
+	} else {
+	    countDownLatch3.countDown();
+	}
+	try {
+	    countDownLatch3.await(5, TimeUnit.SECONDS);
+	} catch (InterruptedException e) {
+	}
+
+	final CountDownLatch countDownLatch4 = new CountDownLatch(1);
+	if (executor != null) {
+	    executor.shutdownGracefully().addListener(new GenericFutureListener<Future<Object>>() {
+		@Override
+		public void operationComplete(Future<Object> future) throws Exception {
+		    System.out.println("4 executor close done");
+		    countDownLatch4.countDown();
+		}
+	    });
+	} else {
+	    countDownLatch4.countDown();
+	}
+	try {
+	    countDownLatch4.await(5, TimeUnit.SECONDS);
+	} catch (InterruptedException e) {
+	}
+	disposableChannel = null;
+	group = null;
+	executor = null;
+    }
+
+    protected void emitLink(Connection connection, Link.State state) {
+	Link link = getLinkFromConnection((InetSocketAddress) connection.channel().localAddress(),
+		(InetSocketAddress) connection.channel().remoteAddress(), state);
+	getLinkSink().tryEmitNext(link);
+    }
+
+    protected void emitMessage(Connection connection, byte[] receivedMessage) {
+	Link link = getLinkFromConnection((InetSocketAddress) connection.channel().localAddress(),
+		(InetSocketAddress) connection.channel().remoteAddress(), Link.State.NONE);
+	getMessageSink().tryEmitNext(new Message(Type.INBOUND, link, receivedMessage));
+    }
+
+    protected void emitMessage(EndPoint local, EndPoint remote, byte[] receivedMessage) {
+	Link link = new Link(Link.State.NONE, local, remote);
+	getMessageSink().tryEmitNext(new Message(Type.OUTBOUND, link, receivedMessage));
     }
 
     private BiFunction<NettyInbound, NettyOutbound, Publisher<Void>> createHandler() {
@@ -566,7 +343,12 @@ public abstract class TcpFluxer implements Fluxer {
 	};
     }
 
-    private boolean isSameLink(@NonNull Channel channel, @NonNull Endpoint remote) {
+    private Link getLinkFromConnection(InetSocketAddress local, InetSocketAddress remote, Link.State state) {
+	return new Link(state, new EndPoint(local.getAddress().getHostAddress(), local.getPort()),
+		new EndPoint(remote.getAddress().getHostAddress(), remote.getPort()));
+    }
+
+    private boolean isSameLink(@NonNull Channel channel, @NonNull EndPoint remote) {
 	InetSocketAddress channelRemoteAddress = (InetSocketAddress) channel.remoteAddress();
 	if (remote.getIpAddress().equals(channelRemoteAddress.getAddress().getHostAddress())
 		&& remote.getPort().equals(Integer.valueOf(channelRemoteAddress.getPort()))) {
@@ -574,94 +356,5 @@ public abstract class TcpFluxer implements Fluxer {
 	}
 
 	return false;
-    }
-
-    private void closeConnections() {
-	long now = System.currentTimeMillis();
-	final CountDownLatch countDownLatch1 = new CountDownLatch(1);
-	if (disposableChannel != null) {
-//	    System.out.println("disposableChannel closinge");
-	    disposableChannel.dispose();
-	    disposableChannel
-		    .onDispose()
-		    .doOnError(err -> {
-//			System.out.println("disposableChannel close failed");
-			countDownLatch1.countDown();
-		    })
-		    .doOnSuccess(__ -> {
-			System.out.println("1. disposableChannel close done");
-			countDownLatch1.countDown();
-		    })
-		    .subscribe();
-	} else {
-//	    System.out.println("disposableChannel is null");
-	    countDownLatch1.countDown();
-	}
-	try {
-	    countDownLatch1.await(5, TimeUnit.SECONDS);
-	} catch (InterruptedException e) {
-//	    System.out.println("error");
-	}
-
-	final CountDownLatch countDownLatch2 = new CountDownLatch(1);
-	if (group != null) {
-	    group.disconnect().addListener(new ChannelGroupFutureListener() {
-		@Override
-		public void operationComplete(ChannelGroupFuture future) throws Exception {
-		    System.out.println("2. group disconnect done");
-		    countDownLatch2.countDown();
-		}
-	    });
-	} else {
-//	    System.out.println("group is null 1");
-	    countDownLatch2.countDown();
-	}
-	try {
-	    countDownLatch2.await(5, TimeUnit.SECONDS);
-	} catch (InterruptedException e) {
-//	    System.out.println("error");
-	}
-
-	final CountDownLatch countDownLatch3 = new CountDownLatch(1);
-	if (group != null) {
-	    group.close().addListener(new ChannelGroupFutureListener() {
-		@Override
-		public void operationComplete(ChannelGroupFuture future) throws Exception {
-		    System.out.println("3. group close done");
-		    countDownLatch3.countDown();
-		}
-	    });
-	} else {
-//	    System.out.println("group is null 2");
-	    countDownLatch3.countDown();
-	}
-	try {
-	    countDownLatch3.await(5, TimeUnit.SECONDS);
-	} catch (InterruptedException e) {
-//	    System.out.println("error");
-	}
-
-	final CountDownLatch countDownLatch4 = new CountDownLatch(1);
-	if (executor != null) {
-	    executor.shutdownGracefully().addListener(new GenericFutureListener<Future<Object>>() {
-		@Override
-		public void operationComplete(Future<Object> future) throws Exception {
-		    System.out.println("4 executor close done");
-		    countDownLatch4.countDown();
-		}
-	    });
-	} else {
-//	    System.out.println("executor is null");
-	    countDownLatch4.countDown();
-	}
-	try {
-	    countDownLatch4.await(5, TimeUnit.SECONDS);
-	} catch (InterruptedException e) {
-//	    System.out.println("error");
-	}
-	disposableChannel = null;
-	group = null;
-	executor = null;
-	System.out.println("closeConnections done: " + (System.currentTimeMillis() - now));
     }
 }
