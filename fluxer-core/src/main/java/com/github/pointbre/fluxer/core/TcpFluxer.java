@@ -443,6 +443,11 @@ public abstract class TcpFluxer implements Fluxer {
 		.subscribe(result -> {
 		});
     }
+    
+    private void emitState(State state)
+    {
+	stateSink.tryEmitNext(state);
+    }
 
     protected void emitLink(Connection connection, Link.State state) {
 	Link link = getLinkFromConnection((InetSocketAddress) connection.channel().localAddress(),
@@ -474,8 +479,7 @@ public abstract class TcpFluxer implements Fluxer {
 	return new Action<Fluxer.State, Fluxer.Event>() {
 	    @Override
 	    public void execute(StateContext<State, Event> context) {
-//		System.out.println("Publishihng a update state: " + context.getTransition().getTarget().getId());
-		stateSink.tryEmitNext(context.getTransition().getTarget().getId());
+		emitState(context.getTransition().getTarget().getId());
 	    }
 	};
     }
