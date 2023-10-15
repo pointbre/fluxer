@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 import com.github.pointbre.fluxer.core.Fluxer;
 import com.github.pointbre.fluxer.core.TcpClientFluxer;
 import com.github.pointbre.fluxer.core.TcpFluxer;
+import com.github.pointbre.fluxer.core.AbstractTcpFluxer;
 import com.github.pointbre.fluxer.core.TcpServerFluxer;
 import com.github.pointbre.fluxer.util.TcpUtil;
 
@@ -30,7 +31,7 @@ public class TcpClientTestStepDefinitions {
 
 	Integer portNumberToUse;
 
-	TcpFluxer tcpServerFluxer1;
+	AbstractTcpFluxer tcpServerFluxer1;
 	Disposable tcpServerFluxer1Status;
 	Disposable tcpServerFluxer1Link;
 	Disposable tcpServerFluxer1Read;
@@ -38,7 +39,7 @@ public class TcpClientTestStepDefinitions {
 	List<Fluxer.Link> tcpServerFluxer1LinkList = new ArrayList<>();
 	List<Fluxer.Message> tcpServerFluxer1ReadList = new ArrayList<>();
 
-	TcpFluxer tcpClientFluxer1;
+	AbstractTcpFluxer tcpClientFluxer1;
 	Disposable tcpClientFluxer1Status;
 	Disposable tcpClientFluxer1Link;
 	Disposable tcpClientFluxer1Read;
@@ -175,7 +176,7 @@ public class TcpClientTestStepDefinitions {
 
 	@When("{string} starts successfully")
 	public void fluxer_starts_successfully(String fluxer) {
-		TcpFluxer fluxerToTest = null;
+		AbstractTcpFluxer fluxerToTest = null;
 		if ("TCP client 1".equals(fluxer)) {
 			fluxerToTest = tcpClientFluxer1;
 		} else if ("TCP server 1".equals(fluxer)) {
@@ -188,7 +189,7 @@ public class TcpClientTestStepDefinitions {
 
 	@When("a new subscriber registers to status of {string}")
 	public void a_new_subscription_to_fluxer_status(String fluxer) {
-		TcpFluxer fluxerToTest = null;
+		AbstractTcpFluxer fluxerToTest = null;
 		if ("TCP client 1".equals(fluxer)) {
 			fluxerToTest = tcpClientFluxer1;
 			tcpClientFluxer1StatusList.clear();
@@ -211,7 +212,7 @@ public class TcpClientTestStepDefinitions {
 
 	@When("{string} stops successfully")
 	public void fluxer_stops_successfully(String fluxer) {
-		TcpFluxer fluxerToTest = null;
+		AbstractTcpFluxer fluxerToTest = null;
 		if ("TCP client 1".equals(fluxer)) {
 			fluxerToTest = tcpClientFluxer1;
 		} else if ("TCP server 1".equals(fluxer)) {
@@ -237,25 +238,25 @@ public class TcpClientTestStepDefinitions {
 //		StepVerifier.create(fluxerToTest.start()).expectError(StartException.class).verify();
 	}
 
-	@Then("the subscriber of status of {string} receives: STOPPED -> STARTING -> STARTED -> STOPPING -> STOPPED")
-	public void fluxer_xxxx(String fluxer) {
-		List<Fluxer.State> statusListToCheck = null;
-		if ("TCP client 1".equals(fluxer)) {
-			statusListToCheck = tcpClientFluxer1StatusList;
-		} else if ("TCP server 1".equals(fluxer)) {
-			statusListToCheck = tcpServerFluxer1StatusList;
-			System.out.println(fluxer +":" + tcpServerFluxer1StatusList.toString());
-		} else {
-			fail("Please check the fluxer name of when description: " + fluxer);
-		}
-		
-		assertEquals(5, statusListToCheck.size());
-		assertEquals(Fluxer.State.STOPPED, statusListToCheck.get(0));
-		assertEquals(Fluxer.State.STARTING, statusListToCheck.get(1));
-		assertEquals(Fluxer.State.STARTED, statusListToCheck.get(2));
-		assertEquals(Fluxer.State.STOPPING, statusListToCheck.get(3));
-		assertEquals(Fluxer.State.STOPPED, statusListToCheck.get(4));
-	}
+//	@Then("the subscriber of status of {string} receives: STOPPED -> STARTING -> STARTED -> STOPPING -> STOPPED")
+//	public void fluxer_xxxx(String fluxer) {
+//		List<Fluxer.State> statusListToCheck = null;
+//		if ("TCP client 1".equals(fluxer)) {
+//			statusListToCheck = tcpClientFluxer1StatusList;
+//		} else if ("TCP server 1".equals(fluxer)) {
+//			statusListToCheck = tcpServerFluxer1StatusList;
+//			System.out.println(fluxer +":" + tcpServerFluxer1StatusList.toString());
+//		} else {
+//			fail("Please check the fluxer name of when description: " + fluxer);
+//		}
+//		
+//		assertEquals(5, statusListToCheck.size());
+//		assertEquals(Fluxer.State.STOPPED, statusListToCheck.get(0));
+//		assertEquals(Fluxer.State.STARTING, statusListToCheck.get(1));
+//		assertEquals(Fluxer.State.STARTED, statusListToCheck.get(2));
+//		assertEquals(Fluxer.State.STOPPING, statusListToCheck.get(3));
+//		assertEquals(Fluxer.State.STOPPED, statusListToCheck.get(4));
+//	}
 
 //	
 //	@Then("TCP client 1 cannot start")

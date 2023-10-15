@@ -1,21 +1,28 @@
 package com.github.pointbre.fluxer.core;
 
-import org.springframework.statemachine.StateMachineEventResult.ResultType;
+import java.net.InetSocketAddress;
 
-import com.github.pointbre.fluxer.core.Fluxer.Result;
-
-import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.ChannelOption;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.netty.ConnectionObserver;
 import reactor.netty.tcp.TcpServer;
 
 @Slf4j
-public class TcpServerFluxer extends TcpFluxer {
+public class TcpServerFluxer extends AbstractTcpFluxer implements ServerFluxer {
 
     public TcpServerFluxer(String localIPAddress, Integer localPort) throws Exception {
 	super(localIPAddress, localPort);
+    }
+
+    @Override
+    public Mono<Result> disconnect(EndPoint remote) {
+	Sinks.One<Result> resultSink = Sinks.one();
+
+	// TODO: Implement this
+
+	return resultSink.asMono();
     }
 
     @Override
@@ -26,39 +33,35 @@ public class TcpServerFluxer extends TcpFluxer {
 		.childOption(ChannelOption.SO_KEEPALIVE, true)
 		.childOption(ChannelOption.SO_LINGER, 0)
 		.doOnBind(tcpServerConfig -> {
-//		    System.out.println("server doOnBind " + tcpServerConfig);
 		})
 		.doOnBound(disposableServer -> {
-//		    System.out.println("server doOnBound " + disposableServer);
 		})
 		.doOnConnection(connection -> {
-//		    System.out.println("server doOnConnection " + connection);
-
-		    // Add handlers here
-		    // connection.addHandlerFirst(new FlushConsolidationHandler(1, true));
-
 		    group.add(connection.channel());
-//		    System.out.println("New connection added:" + connection + ", currently " + group.size());
-		    emitLink(connection, Link.State.CONNECTED);
+
+		    InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
+		    InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
+		    emitLink(connection.channel().id().asLongText(), Link.State.CONNECTED,
+			    new EndPoint(local.getAddress().getHostAddress(), local.getPort()),
+			    new EndPoint(remote.getAddress().getHostAddress(), remote.getPort()));
 		})
 		.doOnUnbound(disposableServer -> {
-//		    System.out.println("server doOnUnbound " + disposableServer);
 		})
 		.doOnChannelInit((connectionObserver, channel, remoteAddress) -> {
-//		    System.out.println("server doOnChannelInit " + connectionObserver + "," + channel + "," + remoteAddress);
 		})
 		.channelGroup(group).childObserve((connection, newState) -> {
 		    // See ConnectionObserver.State
-		    // If doOnConnection is set, this seems to affect childObserve too, as the event
-		    // is not passed to child observer
+		    // - If doOnConnection is set, this seems to affect childObserve too as the
+		    // event is not passed to child observer
 
 		    // There must be a subscriber to inbound stream.
-		    // If not, disconnection event is not reported.
-//		    System.out.println("childObserve:" + newState + ":" + connection);
+		    // - If not, disconnection event is not reported.
 		    if (newState == ConnectionObserver.State.DISCONNECTING) {
-//			System.out.println("server childObserve DISCONNECTING");
-//			System.out.println("server childObserve DISCONNECTING");
-			emitLink(connection, Link.State.DISCONNECTED);
+			InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
+			InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
+			emitLink(connection.channel().id().asLongText(), Link.State.DISCONNECTED,
+				new EndPoint(local.getAddress().getHostAddress(), local.getPort()),
+				new EndPoint(remote.getAddress().getHostAddress(), remote.getPort()));
 		    }
 		})
 		.handle(handler)
@@ -67,28 +70,41 @@ public class TcpServerFluxer extends TcpFluxer {
 		.wiretap(true)
 		.noSSL();
 
+	Sinks.One<Result> resultSink = getResultSink(State.Event.START_REQUESTED);
 	tcpServer.bind()
 		.subscribe(disposableServer -> {
 		    disposableChannel = disposableServer;
-		    System.out.println("server bind() returned");
-//		    emitStatus(State.STARTED);
-		    // TODO call subscribe() like processStopRequest()
-		    sendEvent(Event.PROCESSED);
-		    Sinks.One<Result> resultSink = getResultSink(Event.START_REQUESTED);
-		    if (resultSink != null) {
-			resultSink.tryEmitValue(new Result(Result.Type.PROCESSED, "TcpServer successfully started at " + getIpAddress() + ":" + getPort()));
-		    }
-		    removeResultSink(Event.START_REQUESTED);
+		    sendEvent(State.Event.PROCESSED)
+			    .subscribe(results -> {
+				if (!isEventAccepted(results)) {
+				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
+					    "The request can't be accepted as it's currently " + getFluxerState()));
+				} else {
+				    resultSink.tryEmitValue(new Result(Result.Type.PROCESSED,
+					    "TcpServer successfully started at " + getIpAddress() + ":" + getPort()));
+				}
+				removeResultSink(State.Event.START_REQUESTED);
+			    }, error -> {
+				resultSink.tryEmitValue(new Result(Result.Type.FAILED, error.getLocalizedMessage()));
+				removeResultSink(State.Event.START_REQUESTED);
+			    });
 		}, ex -> {
-		    System.out.println("server bind() error: " + ex.getMessage());
-//		    emitStatus(State.STOPPED);
-		    // TODO call subscribe() like processStopRequest()
-		    sendEvent(Event.FAILED);
-		    Sinks.One<Result> resultSink = getResultSink(Event.START_REQUESTED);
-		    if (resultSink != null) {
-			resultSink.tryEmitValue(new Result(Result.Type.FAILED, "TcpServer failed to start at " + getIpAddress() + ":" + getPort() + ", " +ex.getLocalizedMessage()));
-		    }
-		    removeResultSink(Event.START_REQUESTED);
+		    sendEvent(State.Event.FAILED)
+			    .subscribe(results -> {
+				if (!isEventAccepted(results)) {
+				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
+					    "The request can't be accepted as it's currently " + getFluxerState()));
+				} else {
+				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
+					    "TcpServer failed to start at "
+						    + getIpAddress() + ":" + getPort() + ", "
+						    + ex.getLocalizedMessage()));
+				}
+				removeResultSink(State.Event.START_REQUESTED);
+			    }, error -> {
+				resultSink.tryEmitValue(new Result(Result.Type.FAILED, error.getLocalizedMessage()));
+				removeResultSink(State.Event.START_REQUESTED);
+			    });
 		});
 
     }

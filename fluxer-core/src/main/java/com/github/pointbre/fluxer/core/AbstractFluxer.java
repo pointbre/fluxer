@@ -15,8 +15,11 @@ import org.springframework.statemachine.StateMachineEventResult.ResultType;
 import org.springframework.statemachine.action.Action;
 import org.springframework.statemachine.config.StateMachineBuilder;
 import org.springframework.statemachine.config.StateMachineBuilder.Builder;
-import org.springframework.statemachine.listener.StateMachineListener;
-import org.springframework.statemachine.transition.Transition;
+
+import com.github.pointbre.fluxer.core.Fluxer.EndPoint;
+import com.github.pointbre.fluxer.core.Fluxer.Link;
+import com.github.pointbre.fluxer.core.Fluxer.Message;
+import com.github.pointbre.fluxer.core.Fluxer.Message.Type;
 
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -32,7 +35,6 @@ import reactor.util.concurrent.Queues;
  */
 @Slf4j
 public abstract class AbstractFluxer implements Fluxer {
-
     private Many<State> stateSink;
     private Flux<State> stateFlux;
 
@@ -41,8 +43,11 @@ public abstract class AbstractFluxer implements Fluxer {
 
     private Many<Message> messageSink;
     private Flux<Message> messageFlux;
+    
+    private Many<Log> logSink;
+    private Flux<Log> logFlux;
 
-    private StateMachine<State, Event> fluxerMachine;
+    private StateMachine<Fluxer.State.Type, Fluxer.State.Event> fluxerMachine;
 
     public AbstractFluxer() throws Exception {
 	stateSink = Sinks
@@ -53,7 +58,7 @@ public abstract class AbstractFluxer implements Fluxer {
 		.asFlux()
 		.publishOn(Schedulers.boundedElastic())
 		.doOnSubscribe(subscriber -> {
-		    log.trace("A new subscriber to status flux: " + subscriber);
+		    log.debug("A new subscriber to status flux: " + subscriber);
 		})
 		.log();
 
@@ -65,7 +70,7 @@ public abstract class AbstractFluxer implements Fluxer {
 		.asFlux()
 		.publishOn(Schedulers.boundedElastic())
 		.doOnSubscribe(subscriber -> {
-		    log.trace("A new subscriber to link flux: " + subscriber);
+		    log.debug("A new subscriber to link flux: " + subscriber);
 		})
 		.log();
 
@@ -77,12 +82,23 @@ public abstract class AbstractFluxer implements Fluxer {
 		.asFlux()
 		.publishOn(Schedulers.boundedElastic())
 		.doOnSubscribe(subscriber -> {
-		    log.trace("A new subscriber to message flux: " + subscriber);
+		    log.debug("A new subscriber to message flux: " + subscriber);
+		})
+		.log();
+	
+	logSink = Sinks
+		.many()
+		.multicast()
+		.<Log>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
+	logFlux = logSink
+		.asFlux()
+		.publishOn(Schedulers.boundedElastic())
+		.doOnSubscribe(subscriber -> {
+		    log.debug("A new subscriber to log flux: " + subscriber);
 		})
 		.log();
 
 	fluxerMachine = getFluxerStateMachineBuilder().build();
-	fluxerMachine.addStateListener(new FluxerMachineStateListener());
 	fluxerMachine.startReactively()
 		.doOnError(err -> {
 		})
@@ -105,6 +121,11 @@ public abstract class AbstractFluxer implements Fluxer {
     public Flux<Message> message() {
 	return messageFlux;
     }
+    
+    @Override
+    public Flux<Log> log() {
+	return logFlux;
+    }
 
     @Override
     public void close() throws Exception {
@@ -114,13 +135,14 @@ public abstract class AbstractFluxer implements Fluxer {
 	if (stateSink != null) {
 	    stateSink.tryEmitComplete();
 	}
-
 	if (linkSink != null) {
 	    linkSink.tryEmitComplete();
 	}
-
 	if (messageSink != null) {
 	    messageSink.tryEmitComplete();
+	}
+	if (logSink != null) {
+	    logSink.tryEmitComplete();
 	}
 
 	final CountDownLatch countDownLatch = new CountDownLatch(1);
@@ -139,47 +161,59 @@ public abstract class AbstractFluxer implements Fluxer {
 	}
     }
 
-    abstract protected Action<State, Event> processStartRequest();
+    abstract protected Action<Fluxer.State.Type, Fluxer.State.Event> processStartRequest();
 
-    abstract protected Action<State, Event> processStopRequest();
+    abstract protected Action<Fluxer.State.Type, Fluxer.State.Event> processStopRequest();
 
     abstract protected void closeLinks();
 
-    protected void putResultSink(Event event, Sinks.One<Result> resultSink) {
+    protected void putResultSink(Fluxer.State.Event event, Sinks.One<Result> resultSink) {
 	fluxerMachine.getExtendedState().getVariables().put(event, resultSink);
     }
 
     @SuppressWarnings("unchecked")
-    protected Sinks.One<Result> getResultSink(Event event) {
+    protected Sinks.One<Result> getResultSink(Fluxer.State.Event event) {
 	return (One<Result>) (fluxerMachine.getExtendedState().getVariables().get(event));
     }
 
-    protected void removeResultSink(Event event) {
+    protected void removeResultSink(Fluxer.State.Event event) {
 	fluxerMachine.getExtendedState().getVariables().remove(event);
     }
 
-    protected Mono<List<StateMachineEventResult<State, Event>>> sendEvent(Event eventToSend) {
+    protected Mono<List<StateMachineEventResult<Fluxer.State.Type, Fluxer.State.Event>>> sendEvent(Fluxer.State.Event eventToSend) {
 	return fluxerMachine.sendEventCollect(Mono.just(MessageBuilder.withPayload(eventToSend).build()));
     }
 
-    protected boolean isEventAccepted(List<StateMachineEventResult<State, Event>> results) {
+    protected boolean isEventAccepted(List<StateMachineEventResult<Fluxer.State.Type, Fluxer.State.Event>> results) {
 	return results.stream().anyMatch(result -> result.getResultType().equals(ResultType.ACCEPTED));
     }
 
-    protected State getState() {
+    protected Fluxer.State.Type getFluxerState() {
 	return fluxerMachine.getState().getId();
     }
     
+    protected String getFluxerId() {
+	return fluxerMachine.getUuid().toString();
+    }
+
     protected Many<Link> getLinkSink() {
 	return linkSink;
     }
-    
+
     protected Many<Message> getMessageSink() {
 	return messageSink;
     }
     
-    private Builder<State, Event> getFluxerStateMachineBuilder() throws Exception {
-	Builder<State, Event> builder = StateMachineBuilder.builder();
+    protected void emitLink(String id, Link.State state, EndPoint local, EndPoint remote) {
+	getLinkSink().tryEmitNext(new Link(id, state, local, remote));
+    }
+
+    protected void emitMessage(Message.Type type, EndPoint local, EndPoint remote, byte[] receivedMessage) {
+	getMessageSink().tryEmitNext(new Message(type, local, remote, receivedMessage));
+    }
+
+    private Builder<Fluxer.State.Type, Fluxer.State.Event> getFluxerStateMachineBuilder() throws Exception {
+	Builder<Fluxer.State.Type, Fluxer.State.Event> builder = StateMachineBuilder.builder();
 
 	builder.configureConfiguration()
 		.withConfiguration()
@@ -187,118 +221,63 @@ public abstract class AbstractFluxer implements Fluxer {
 
 	builder.configureStates()
 		.withStates()
-		.initial(State.STOPPED, publishStateChange())
-		.state(State.STOPPED)
-		.state(State.STARTED)
-		.state(State.STARTING, processStartRequest())
-		.state(State.STOPPING, processStopRequest());
+		.initial(Fluxer.State.Type.STOPPED, publishStateChange())
+		.state(Fluxer.State.Type.STOPPED)
+		.state(Fluxer.State.Type.STARTED)
+		.state(Fluxer.State.Type.STARTING, processStartRequest())
+		.state(Fluxer.State.Type.STOPPING, processStopRequest());
 
 	builder.configureTransitions()
 		.withExternal()
-		.source(State.STOPPED)
-		.event(Event.START_REQUESTED)
-		.target(State.STARTING)
+		.source(Fluxer.State.Type.STOPPED)
+		.event(Fluxer.State.Event.START_REQUESTED)
+		.target(Fluxer.State.Type.STARTING)
 		.action(publishStateChange())
 		.and()
 		.withExternal()
-		.source(State.STARTING)
-		.event(Event.PROCESSED)
-		.target(State.STARTED)
+		.source(Fluxer.State.Type.STARTING)
+		.event(Fluxer.State.Event.PROCESSED)
+		.target(Fluxer.State.Type.STARTED)
 		.action(publishStateChange())
 		.and()
 		.withExternal()
-		.source(State.STARTING)
-		.event(Event.FAILED)
-		.target(State.STOPPED)
+		.source(Fluxer.State.Type.STARTING)
+		.event(Fluxer.State.Event.FAILED)
+		.target(Fluxer.State.Type.STOPPED)
 		.action(publishStateChange())
 		.and()
 		.withExternal()
-		.source(State.STARTED)
-		.event(Event.STOP_REQUESTED)
-		.target(State.STOPPING)
+		.source(Fluxer.State.Type.STARTED)
+		.event(Fluxer.State.Event.STOP_REQUESTED)
+		.target(Fluxer.State.Type.STOPPING)
 		.action(publishStateChange())
 		.and()
 		.withExternal()
-		.source(State.STOPPING)
-		.event(Event.PROCESSED)
-		.target(State.STOPPED)
+		.source(Fluxer.State.Type.STOPPING)
+		.event(Fluxer.State.Event.PROCESSED)
+		.target(Fluxer.State.Type.STOPPED)
 		.action(publishStateChange())
 		.and()
 		// Currently this transition is not used
 		.withExternal()
-		.source(State.STOPPING)
-		.event(Event.FAILED)
-		.target(State.STOPPED)
+		.source(Fluxer.State.Type.STOPPING)
+		.event(Fluxer.State.Event.FAILED)
+		.target(Fluxer.State.Type.STOPPED)
 		.action(publishStateChange());
 
 	return builder;
     }
 
-    private final class FluxerMachineStateListener implements StateMachineListener<Fluxer.State, Fluxer.Event> {
-	@Override
-	public void transitionStarted(Transition<State, Event> transition) {
-	}
-
-	@Override
-	public void transitionEnded(Transition<State, Event> transition) {
-	}
-
-	@Override
-	public void transition(Transition<State, Event> transition) {
-	}
-
-	@Override
-	public void stateMachineStopped(StateMachine<State, Event> stateMachine) {
-	}
-
-	@Override
-	public void stateMachineStarted(StateMachine<State, Event> stateMachine) {
-	}
-
-	@Override
-	public void stateMachineError(StateMachine<State, Event> stateMachine, Exception exception) {
-	    System.out.println("stateMachineError: " + exception);
-	}
-
-	@Override
-	public void stateExited(org.springframework.statemachine.state.State<State, Event> state) {
-	}
-
-	@Override
-	public void stateEntered(org.springframework.statemachine.state.State<State, Event> state) {
-	}
-
-	@Override
-	public void stateContext(StateContext<State, Event> stateContext) {
-	}
-
-	@Override
-	public void stateChanged(org.springframework.statemachine.state.State<State, Event> from,
-		org.springframework.statemachine.state.State<State, Event> to) {
-	    System.out.println("stateChanged: " + (from != null ? from.getIds() : "") + " --> " + to.getIds());
-	}
-
-	@Override
-	public void extendedStateChanged(Object key, Object value) {
-	}
-
-	@Override
-	public void eventNotAccepted(org.springframework.messaging.Message<Event> event) {
-	    System.out.println("eventNotAccepted: " + event);
-	}
-    }
-
-    private Action<State, Event> publishStateChange() {
-	return new Action<Fluxer.State, Fluxer.Event>() {
+    private Action<Fluxer.State.Type, Fluxer.State.Event> publishStateChange() {
+	return new Action<Fluxer.State.Type, Fluxer.State.Event>() {
 	    @Override
-	    public void execute(StateContext<State, Event> context) {
-		emitState(context.getTransition().getTarget().getId());
+	    public void execute(StateContext<Fluxer.State.Type, Fluxer.State.Event> context) {
+		emitState(context.getTransition().getTarget().getId(), context.getEvent());
 	    }
 	};
     }
-    
-    private void emitState(State state) {
-	stateSink.tryEmitNext(state);
-    }
 
+    private void emitState(Fluxer.State.Type state, Fluxer.State.Event event) {
+	stateSink.tryEmitNext(new Fluxer.State(getFluxerId(), state, event));
+    }
 }

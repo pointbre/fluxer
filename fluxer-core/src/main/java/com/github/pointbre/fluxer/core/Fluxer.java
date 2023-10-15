@@ -1,5 +1,7 @@
 package com.github.pointbre.fluxer.core;
 
+import org.slf4j.event.Level;
+
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -54,13 +56,16 @@ public interface Fluxer extends AutoCloseable {
      */
     Flux<Message> message();
 
-    public enum State {
-	STARTING, STARTED, STOPPING, STOPPED;
-    }
+    /**
+     * Provides the stream of Fluxer's {@link Log} changes
+     * 
+     * @return {@link Flux} of {@link Log}
+     */
+    Flux<Log> log();
+    
+    String getIpAddress();
 
-    public enum Event {
-	START_REQUESTED, STOP_REQUESTED, PROCESSED, FAILED;
-    }
+    Integer getPort();
 
     @Value
     @AllArgsConstructor
@@ -71,11 +76,52 @@ public interface Fluxer extends AutoCloseable {
 	public enum Type {
 	    PROCESSED, FAILED
 	}
-	
+
 	@NonNull
 	private Type type;
 	@NonNull
 	private String description;
+    }
+
+    @Value
+    @AllArgsConstructor
+    @Getter
+    @ToString
+    @EqualsAndHashCode
+    public class State {
+	public enum Type {
+	    STARTING, STARTED, STOPPING, STOPPED
+	}
+
+	public enum Event {
+	    START_REQUESTED, STOP_REQUESTED, PROCESSED, FAILED;
+	}
+
+	@NonNull
+	private String id;
+	@NonNull
+	private Type type;
+	private Event event;
+    }
+
+    @Value
+    @AllArgsConstructor
+    @Getter
+    @ToString
+    @EqualsAndHashCode
+    public class Link {
+	public enum State {
+	    CONNECTED, DISCONNECTED, NONE;
+	}
+
+	@NonNull
+	private String id;
+	@NonNull
+	private State state;
+	@NonNull
+	private EndPoint local;
+	@NonNull
+	private EndPoint remote;
     }
 
     @Value
@@ -95,22 +141,6 @@ public interface Fluxer extends AutoCloseable {
     @Getter
     @ToString
     @EqualsAndHashCode
-    public class Link {
-	public enum State {
-	    CONNECTED, DISCONNECTED, NONE;
-	}
-
-	@NonNull
-	private State state;
-	private EndPoint local;
-	private EndPoint remote;
-    }
-
-    @Value
-    @AllArgsConstructor
-    @Getter
-    @ToString
-    @EqualsAndHashCode
     public class Message {
 	public enum Type {
 	    INBOUND, OUTBOUND;
@@ -119,7 +149,9 @@ public interface Fluxer extends AutoCloseable {
 	@NonNull
 	private Type type;
 	@NonNull
-	private Link link;
+	private EndPoint local;
+	@NonNull
+	private EndPoint remote;
 	@NonNull
 	private byte[] message;
     }
@@ -128,11 +160,11 @@ public interface Fluxer extends AutoCloseable {
     @AllArgsConstructor
     @Getter
     @ToString
-    @EqualsAndHashCode(callSuper = false)
-    public class FluxerException extends Exception {
-	private static final long serialVersionUID = 7341500687389967346L;
-
+    @EqualsAndHashCode
+    public class Log {
 	@NonNull
-	private String description;
+	private Level level;
+	@NonNull
+	private byte[] log;
     }
 }

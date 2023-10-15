@@ -10,7 +10,7 @@ import com.github.pointbre.fluxer.core.Fluxer.EndPoint;
 import com.github.pointbre.fluxer.core.Fluxer.Link;
 import com.github.pointbre.fluxer.core.Fluxer.Message;
 import com.github.pointbre.fluxer.core.TcpClientFluxer;
-import com.github.pointbre.fluxer.core.TcpFluxer;
+import com.github.pointbre.fluxer.core.AbstractTcpFluxer;
 import com.github.pointbre.fluxer.core.TcpServerFluxer;
 import com.github.pointbre.fluxer.util.TcpUtil;
 
@@ -31,8 +31,8 @@ public class TcpClientStepDefinitions2 {
 
 	private Integer portNumber1;
 
-	TcpFluxer tcpServerFluxer1;
-	TcpFluxer tcpServerFluxer2;
+	AbstractTcpFluxer tcpServerFluxer1;
+	AbstractTcpFluxer tcpServerFluxer2;
 
 	Disposable tcpServerFluxer1Status;
 	Disposable tcpServerFluxer1Link;
@@ -42,7 +42,7 @@ public class TcpClientStepDefinitions2 {
 	Disposable tcpServerFluxer2Link;
 	Disposable tcpServerFluxer2Read;
 
-	TcpFluxer tcpClientFluxer1;
+	AbstractTcpFluxer tcpClientFluxer1;
 	Link connectedClientLink;
 
 	Disposable tcpClientFluxer1Status;

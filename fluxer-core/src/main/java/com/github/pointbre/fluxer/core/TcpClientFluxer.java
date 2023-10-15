@@ -1,12 +1,14 @@
 package com.github.pointbre.fluxer.core;
 
+import java.net.InetSocketAddress;
+
 import io.netty.channel.ChannelOption;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Sinks;
 import reactor.netty.tcp.TcpClient;
 
 @Slf4j
-public class TcpClientFluxer extends TcpFluxer {
+public class TcpClientFluxer extends AbstractTcpFluxer {
 
     public TcpClientFluxer(String remoteIPAddress, Integer remotePort) throws Exception {
 	super(remoteIPAddress, remotePort);
@@ -18,34 +20,29 @@ public class TcpClientFluxer extends TcpFluxer {
 		.option(ChannelOption.SO_KEEPALIVE, true)
 		.option(ChannelOption.TCP_NODELAY, true)
 		.doOnResolve(connection -> {
-//		    log.debug("client doOnResolve: " + connection);
 		})
 		.doAfterResolve((connection, socketAddress) -> {
-//		    log.debug("client doAfterResolve: " + connection + ", " + socketAddress);
 		})
 		.doOnResolveError((connection, error) -> {
-//		    log.debug("client doOnResolveError: " + connection + ", " + error);
 		})
 		.doOnConnect(config -> {
-//		    log.debug("client doOnConnect: " + config);
 		})
 		.doOnConnected(connection -> {
-//		    log.debug("client doOnConnected: " + connection);
-		    // Add handlers here
-//					connection.addHandlerFirst(new FlushConsolidationHandler(1, true));					
 		    group.add(connection.channel());
-//		    log.debug("New connection added:" + connection + ", currently " + group.size());
-
-		    emitLink(connection, Link.State.CONNECTED);
+		    InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
+		    InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
+		    emitLink(connection.channel().id().asLongText(), Link.State.CONNECTED,
+			    new EndPoint(local.getAddress().getHostAddress(), local.getPort()),
+			    new EndPoint(remote.getAddress().getHostAddress(), remote.getPort()));
 		})
 		.doOnDisconnected(connection -> {
-//		    System.out.println("client doOnDisconnected: " + connection);
-//		    log.debug("client doOnDisconnected: " + connection);
-		    emitLink(connection, Link.State.DISCONNECTED);
+		    InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
+		    InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
+		    emitLink(connection.channel().id().asLongText(), Link.State.DISCONNECTED,
+			    new EndPoint(local.getAddress().getHostAddress(), local.getPort()),
+			    new EndPoint(remote.getAddress().getHostAddress(), remote.getPort()));
 		})
 		.observe((tcpConnection, newState) -> {
-//		    System.out.println("client observe:" + newState + ":" + tcpConnection);
-//		    log.debug("client observe:" + newState + ":" + tcpConnection);
 		})
 		.handle(handler)
 		.host(getIpAddress())
@@ -53,29 +50,41 @@ public class TcpClientFluxer extends TcpFluxer {
 		.wiretap(true)
 		.noSSL();
 
+	Sinks.One<Result> resultSink = getResultSink(State.Event.START_REQUESTED);
 	tcpClient.connect()
 		.subscribe(connection -> {
 		    this.disposableChannel = connection;
-		    System.out.println("client connect() returned, will send PROCESSED");
-//		    emitStatus(State.STARTED);
-		    // TODO call subscribe() like processStopRequest()
-		    sendEvent(Event.PROCESSED);
-		    Sinks.One<Result> resultSink = getResultSink(Event.START_REQUESTED);
-		    if (resultSink != null) {
-			resultSink.tryEmitValue(new Result(Result.Type.PROCESSED, "TcpClient successfully started at " + getIpAddress() + ":" + getPort()));
-		    }
-		    removeResultSink(Event.START_REQUESTED);
+		    sendEvent(State.Event.PROCESSED)
+			    .subscribe(results -> {
+				if (!isEventAccepted(results)) {
+				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
+					    "The request can't be accepted as it's currently " + getFluxerState()));
+				} else {
+				    resultSink.tryEmitValue(new Result(Result.Type.PROCESSED,
+					    "TcpClient successfully started at " + getIpAddress() + ":" + getPort()));
+				}
+				removeResultSink(State.Event.START_REQUESTED);
+			    }, error -> {
+				resultSink.tryEmitValue(new Result(Result.Type.FAILED, error.getLocalizedMessage()));
+				removeResultSink(State.Event.START_REQUESTED);
+			    });
 		}, ex -> {
-//					emitStartException(resultSink, "Failed to connect: " + ex.getLocalizedMessage());
-		    System.out.println("client connect() error: " + ex.getMessage());
-//		    emitStatus(State.STOPPED);
-		    // TODO call subscribe() like processStopRequest()
-		    sendEvent(Event.FAILED);
-		    Sinks.One<Result> resultSink = getResultSink(Event.START_REQUESTED);
-		    if (resultSink != null) {
-			resultSink.tryEmitValue(new Result(Result.Type.FAILED, "TcpClient failed to start at " + getIpAddress() + ":" + getPort() + ", " +ex.getLocalizedMessage()));
-		    }
-		    removeResultSink(Event.START_REQUESTED);
+		    sendEvent(State.Event.FAILED)
+			    .subscribe(results -> {
+				if (!isEventAccepted(results)) {
+				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
+					    "The request can't be accepted as it's currently " + getFluxerState()));
+				} else {
+				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
+					    "TcpClient failed to start at "
+						    + getIpAddress() + ":" + getPort() + ", "
+						    + ex.getLocalizedMessage()));
+				}
+				removeResultSink(State.Event.START_REQUESTED);
+			    }, error -> {
+				resultSink.tryEmitValue(new Result(Result.Type.FAILED, error.getLocalizedMessage()));
+				removeResultSink(State.Event.START_REQUESTED);
+			    });
 		});
     }
 }
