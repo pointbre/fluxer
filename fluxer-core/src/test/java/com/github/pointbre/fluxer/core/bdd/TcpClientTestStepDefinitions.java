@@ -1,6 +1,5 @@
 package com.github.pointbre.fluxer.core.bdd;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -9,10 +8,9 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import com.github.pointbre.fluxer.core.AbstractTcpFluxer;
 import com.github.pointbre.fluxer.core.Fluxer;
 import com.github.pointbre.fluxer.core.TcpClientFluxer;
-import com.github.pointbre.fluxer.core.TcpFluxer;
-import com.github.pointbre.fluxer.core.AbstractTcpFluxer;
 import com.github.pointbre.fluxer.core.TcpServerFluxer;
 import com.github.pointbre.fluxer.util.TcpUtil;
 
@@ -20,7 +18,6 @@ import io.cucumber.java.After;
 import io.cucumber.java.Before;
 import io.cucumber.java.Scenario;
 import io.cucumber.java.en.Given;
-import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 import reactor.core.Disposable;
 import reactor.test.StepVerifier;
@@ -225,18 +222,18 @@ public class TcpClientTestStepDefinitions {
 		assertTrue(tcpClientFluxer1StatusList.size() > 0);
 	}
 
-	@Then("{string} cannot start")
-	public void fluxer_cannot_start(String fluxer) {
-		TcpFluxer fluxerToTest = null;
-		if ("TCP client 1".equals(fluxer)) {
-			fluxerToTest = tcpClientFluxer1;
-		} else if ("TCP server 1".equals(fluxer)) {
-			fluxerToTest = tcpServerFluxer1;
-		} else {
-			fail("Please check the fluxer name of when description: " + fluxer);
-		}
-//		StepVerifier.create(fluxerToTest.start()).expectError(StartException.class).verify();
-	}
+//	@Then("{string} cannot start")
+//	public void fluxer_cannot_start(String fluxer) {
+//		TcpFluxer fluxerToTest = null;
+//		if ("TCP client 1".equals(fluxer)) {
+//			fluxerToTest = tcpClientFluxer1;
+//		} else if ("TCP server 1".equals(fluxer)) {
+//			fluxerToTest = tcpServerFluxer1;
+//		} else {
+//			fail("Please check the fluxer name of when description: " + fluxer);
+//		}
+////		StepVerifier.create(fluxerToTest.start()).expectError(StartException.class).verify();
+//	}
 
 //	@Then("the subscriber of status of {string} receives: STOPPED -> STARTING -> STARTED -> STOPPING -> STOPPED")
 //	public void fluxer_xxxx(String fluxer) {
