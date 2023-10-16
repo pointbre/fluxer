@@ -1,35 +1,22 @@
 package com.github.pointbre.fluxer.core.bdd;
 
-import static org.junit.jupiter.api.Assertions.fail;
-
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import com.github.pointbre.fluxer.core.Fluxer;
-import com.github.pointbre.fluxer.core.Fluxer.EndPoint;
-import com.github.pointbre.fluxer.core.Fluxer.Link;
-import com.github.pointbre.fluxer.core.Fluxer.Message;
-import com.github.pointbre.fluxer.core.TcpClientFluxer;
 import com.github.pointbre.fluxer.core.AbstractTcpFluxer;
-import com.github.pointbre.fluxer.core.TcpServerFluxer;
-import com.github.pointbre.fluxer.util.TcpUtil;
+import com.github.pointbre.fluxer.core.Fluxer.Link;
 
 import io.cucumber.java.After;
 import io.cucumber.java.Before;
 import io.cucumber.java.Scenario;
-import io.cucumber.java.en.Given;
-import io.cucumber.java.en.Then;
-import io.cucumber.java.en.When;
-import io.netty.buffer.ByteBufUtil;
 import reactor.core.Disposable;
-import reactor.test.StepVerifier;
 
 public class TcpClientStepDefinitions2 {
 	private static final int WAIT_TIMEOUT = 30;
-	private static final String HOST_TO_TEST = "127.0.0.1";
-	private static final String EMPTY_STRING = "";
+//	private static final String HOST_TO_TEST = "127.0.0.1";
+//	private static final String EMPTY_STRING = "";
 
-	private Integer portNumber1;
+//	private Integer portNumber1;
 
 	AbstractTcpFluxer tcpServerFluxer1;
 	AbstractTcpFluxer tcpServerFluxer2;

@@ -10,8 +10,6 @@ import org.reactivestreams.Publisher;
 import org.springframework.statemachine.StateContext;
 import org.springframework.statemachine.action.Action;
 
-import com.github.pointbre.fluxer.core.Fluxer.Message.Type;
-
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -26,16 +24,13 @@ import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
-import reactor.netty.Connection;
 import reactor.netty.DisposableChannel;
 import reactor.netty.NettyInbound;
 import reactor.netty.NettyOutbound;
 
-@Slf4j
-public abstract class AbstractTcpFluxer extends AbstractFluxer {
+public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implements TcpFluxer<byte[]> {
 
     private final String ipAddress;
     private final Integer port;
@@ -60,48 +55,48 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer {
     }
 
     @Override
-    public Mono<Result> start() {
-	Sinks.One<Result> resultSink = Sinks.one();
+    public Mono<Fluxer.Result> start() {
+	Sinks.One<Fluxer.Result> resultSink = Sinks.one();
 
-	putResultSink(State.Event.START_REQUESTED, resultSink);
-	sendEvent(State.Event.START_REQUESTED)
+	putResultSink(Fluxer.State.Event.START_REQUESTED, resultSink);
+	sendEvent(Fluxer.State.Event.START_REQUESTED)
 		.subscribe(results -> {
 		    if (!isEventAccepted(results)) {
-			resultSink.tryEmitValue(new Result(Result.Type.FAILED,
+			resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED,
 				"The request can't be accepted as it's currently " + getFluxerState()));
-			removeResultSink(State.Event.START_REQUESTED);
+			removeResultSink(Fluxer.State.Event.START_REQUESTED);
 		    }
 		}, error -> {
-		    resultSink.tryEmitValue(new Result(Result.Type.FAILED, error.getLocalizedMessage()));
-		    removeResultSink(State.Event.START_REQUESTED);
+		    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED, error.getLocalizedMessage()));
+		    removeResultSink(Fluxer.State.Event.START_REQUESTED);
 		});
 
 	return resultSink.asMono();
     }
 
     @Override
-    public Mono<Result> stop() {
-	Sinks.One<Result> resultSink = Sinks.one();
+    public Mono<Fluxer.Result> stop() {
+	Sinks.One<Fluxer.Result> resultSink = Sinks.one();
 
-	putResultSink(State.Event.STOP_REQUESTED, resultSink);
-	sendEvent(State.Event.STOP_REQUESTED)
+	putResultSink(Fluxer.State.Event.STOP_REQUESTED, resultSink);
+	sendEvent(Fluxer.State.Event.STOP_REQUESTED)
 		.subscribe(results -> {
 		    if (!isEventAccepted(results)) {
-			resultSink.tryEmitValue(new Result(Result.Type.FAILED,
+			resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED,
 				"The request can't be accepted as it's currently " + getFluxerState()));
-			removeResultSink(State.Event.STOP_REQUESTED);
+			removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
 		    }
 		}, error -> {
-		    resultSink.tryEmitValue(new Result(Result.Type.FAILED, error.getLocalizedMessage()));
-		    removeResultSink(State.Event.STOP_REQUESTED);
+		    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED, error.getLocalizedMessage()));
+		    removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
 		});
 
 	return resultSink.asMono();
     }
 
     @Override
-    public Mono<Result> send(byte[] message, EndPoint remote) {
-	Sinks.One<Result> resultSink = Sinks.one();
+    public Mono<Fluxer.Result> send(byte[] message, Fluxer.EndPoint remote) {
+	Sinks.One<Fluxer.Result> resultSink = Sinks.one();
 
 	if (group != null) {
 	    Iterator<Channel> channelIterator = group.iterator();
@@ -117,18 +112,18 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer {
 
 	    if (linkFound) {
 		InetSocketAddress localAddress = (InetSocketAddress) channel.localAddress();
-		final EndPoint local = new EndPoint(localAddress.getAddress().getHostAddress(), localAddress.getPort());
+		final Fluxer.EndPoint local = new Fluxer.EndPoint(localAddress.getAddress().getHostAddress(), localAddress.getPort());
 		channel.writeAndFlush(Unpooled.wrappedBuffer(message))
 			.addListener(new ChannelFutureListener() {
 			    @Override
 			    public void operationComplete(ChannelFuture future) throws Exception {
-				resultSink.tryEmitValue(new Result(Result.Type.PROCESSED,
+				resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.PROCESSED,
 					"Successfully sent to " + remote + ":" + ByteBufUtil.hexDump(message)));
-				emitMessage(Message.Type.OUTBOUND, local, remote, message);
+				emitMessage(Fluxer.Message.Type.OUTBOUND, local, remote, message);
 			    }
 			});
 	    } else {
-		resultSink.tryEmitValue(new Result(Result.Type.FAILED, "Matching link is not found: " + remote));
+		resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED, "Matching link is not found: " + remote));
 	    }
 	}
 
@@ -167,26 +162,26 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer {
 	    public void execute(StateContext<Fluxer.State.Type, Fluxer.State.Event> context) {
 		closeLinks();
 
-		Sinks.One<Result> resultSink = getResultSink(State.Event.STOP_REQUESTED);
+		Sinks.One<Result> resultSink = getResultSink(Fluxer.State.Event.STOP_REQUESTED);
 
-		sendEvent(State.Event.PROCESSED)
+		sendEvent(Fluxer.State.Event.PROCESSED)
 			.subscribe(results -> {
 			    if (isEventAccepted(results)) {
 				if (resultSink != null) {
-				    resultSink.tryEmitValue(new Result(Result.Type.PROCESSED, "Successfully stopped"));
-				    removeResultSink(State.Event.STOP_REQUESTED);
+				    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.PROCESSED, "Successfully stopped"));
+				    removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
 				}
 			    } else {
 				if (resultSink != null) {
-				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
+				    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED,
 					    "The request can't be accepted as it's currently " + getFluxerState()));
-				    removeResultSink(State.Event.STOP_REQUESTED);
+				    removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
 				}
 			    }
 			}, error -> {
 			    if (resultSink != null) {
-				resultSink.tryEmitValue(new Result(Result.Type.FAILED, error.getLocalizedMessage()));
-				removeResultSink(State.Event.STOP_REQUESTED);
+				resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED, error.getLocalizedMessage()));
+				removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
 			    }
 			});
 	    }
@@ -296,9 +291,9 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer {
 //			System.out.println(connection.channel().remoteAddress().toString());
 			InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
 			InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
-			emitMessage(Message.Type.INBOUND,
-				new EndPoint(local.getAddress().getHostAddress(), local.getPort()),
-				new EndPoint(remote.getAddress().getHostAddress(), remote.getPort()), buf);
+			emitMessage(Fluxer.Message.Type.INBOUND,
+				new Fluxer.EndPoint(local.getAddress().getHostAddress(), local.getPort()),
+				new Fluxer.EndPoint(remote.getAddress().getHostAddress(), remote.getPort()), buf);
 
 		    });
 		}).doOnError(e -> {

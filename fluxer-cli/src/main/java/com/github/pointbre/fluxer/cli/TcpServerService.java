@@ -1,8 +1,5 @@
 package com.github.pointbre.fluxer.cli;
 
-import lombok.extern.slf4j.Slf4j;
-
-@Slf4j
 //@Service
 public class TcpServerService {
 //    private TcpServerFluxer fluxer;

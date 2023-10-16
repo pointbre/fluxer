@@ -16,11 +16,6 @@ import org.springframework.statemachine.action.Action;
 import org.springframework.statemachine.config.StateMachineBuilder;
 import org.springframework.statemachine.config.StateMachineBuilder.Builder;
 
-import com.github.pointbre.fluxer.core.Fluxer.EndPoint;
-import com.github.pointbre.fluxer.core.Fluxer.Link;
-import com.github.pointbre.fluxer.core.Fluxer.Message;
-import com.github.pointbre.fluxer.core.Fluxer.Message.Type;
-
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -30,22 +25,19 @@ import reactor.core.publisher.Sinks.One;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.concurrent.Queues;
 
-/**
- * 
- */
 @Slf4j
-public abstract class AbstractFluxer implements Fluxer {
-    private Many<State> stateSink;
-    private Flux<State> stateFlux;
+public abstract class AbstractFluxer<T> implements Fluxer<T> {
+    private Many<Fluxer.State> stateSink;
+    private Flux<Fluxer.State> stateFlux;
 
-    private Many<Link> linkSink;
-    private Flux<Link> linkFlux;
+    private Many<Fluxer.Link> linkSink;
+    private Flux<Fluxer.Link> linkFlux;
 
-    private Many<Message> messageSink;
-    private Flux<Message> messageFlux;
+    private Many<Fluxer.Message<T>> messageSink;
+    private Flux<Fluxer.Message<T>> messageFlux;
     
-    private Many<Log> logSink;
-    private Flux<Log> logFlux;
+    private Many<Fluxer.Log> logSink;
+    private Flux<Fluxer.Log> logFlux;
 
     private StateMachine<Fluxer.State.Type, Fluxer.State.Event> fluxerMachine;
 
@@ -53,7 +45,7 @@ public abstract class AbstractFluxer implements Fluxer {
 	stateSink = Sinks
 		.many()
 		.multicast()
-		.<State>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
+		.<Fluxer.State>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
 	stateFlux = stateSink
 		.asFlux()
 		.publishOn(Schedulers.boundedElastic())
@@ -65,7 +57,7 @@ public abstract class AbstractFluxer implements Fluxer {
 	linkSink = Sinks
 		.many()
 		.multicast()
-		.<Link>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
+		.<Fluxer.Link>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
 	linkFlux = linkSink
 		.asFlux()
 		.publishOn(Schedulers.boundedElastic())
@@ -77,7 +69,7 @@ public abstract class AbstractFluxer implements Fluxer {
 	messageSink = Sinks
 		.many()
 		.multicast()
-		.<Message>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
+		.<Fluxer.Message<T>>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
 	messageFlux = messageSink
 		.asFlux()
 		.publishOn(Schedulers.boundedElastic())
@@ -89,7 +81,7 @@ public abstract class AbstractFluxer implements Fluxer {
 	logSink = Sinks
 		.many()
 		.multicast()
-		.<Log>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
+		.<Fluxer.Log>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
 	logFlux = logSink
 		.asFlux()
 		.publishOn(Schedulers.boundedElastic())
@@ -108,22 +100,22 @@ public abstract class AbstractFluxer implements Fluxer {
     }
 
     @Override
-    public Flux<State> state() {
+    public Flux<Fluxer.State> state() {
 	return stateFlux;
     }
 
     @Override
-    public Flux<Link> link() {
+    public Flux<Fluxer.Link> link() {
 	return linkFlux;
     }
 
     @Override
-    public Flux<Message> message() {
+    public Flux<Fluxer.Message<T>> message() {
 	return messageFlux;
     }
     
     @Override
-    public Flux<Log> log() {
+    public Flux<Fluxer.Log> log() {
 	return logFlux;
     }
 
@@ -172,8 +164,8 @@ public abstract class AbstractFluxer implements Fluxer {
     }
 
     @SuppressWarnings("unchecked")
-    protected Sinks.One<Result> getResultSink(Fluxer.State.Event event) {
-	return (One<Result>) (fluxerMachine.getExtendedState().getVariables().get(event));
+    protected Sinks.One<Fluxer.Result> getResultSink(Fluxer.State.Event event) {
+	return (One<Fluxer.Result>) (fluxerMachine.getExtendedState().getVariables().get(event));
     }
 
     protected void removeResultSink(Fluxer.State.Event event) {
@@ -196,20 +188,20 @@ public abstract class AbstractFluxer implements Fluxer {
 	return fluxerMachine.getUuid().toString();
     }
 
-    protected Many<Link> getLinkSink() {
+    protected Many<Fluxer.Link> getLinkSink() {
 	return linkSink;
     }
 
-    protected Many<Message> getMessageSink() {
+    protected Many<Fluxer.Message<T>> getMessageSink() {
 	return messageSink;
     }
     
-    protected void emitLink(String id, Link.State state, EndPoint local, EndPoint remote) {
-	getLinkSink().tryEmitNext(new Link(id, state, local, remote));
+    protected void emitLink(String id, Fluxer.Link.State state, Fluxer.EndPoint local, Fluxer.EndPoint remote) {
+	getLinkSink().tryEmitNext(new Fluxer.Link(id, state, local, remote));
     }
 
-    protected void emitMessage(Message.Type type, EndPoint local, EndPoint remote, byte[] receivedMessage) {
-	getMessageSink().tryEmitNext(new Message(type, local, remote, receivedMessage));
+    protected void emitMessage(Fluxer.Message.Type type, Fluxer.EndPoint local, Fluxer.EndPoint remote, T receivedMessage) {
+	getMessageSink().tryEmitNext(Fluxer.Message.<T>of(type, local, remote, receivedMessage));
     }
 
     private Builder<Fluxer.State.Type, Fluxer.State.Event> getFluxerStateMachineBuilder() throws Exception {

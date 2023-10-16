@@ -3,12 +3,10 @@ package com.github.pointbre.fluxer.core;
 import java.net.InetSocketAddress;
 
 import io.netty.channel.ChannelOption;
-import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Sinks;
 import reactor.netty.tcp.TcpClient;
 
-@Slf4j
-public class TcpClientFluxer extends AbstractTcpFluxer {
+public class TcpClientFluxer extends AbstractTcpFluxer implements ClientFluxer<byte[]> {
 
     public TcpClientFluxer(String remoteIPAddress, Integer remotePort) throws Exception {
 	super(remoteIPAddress, remotePort);
@@ -32,15 +30,15 @@ public class TcpClientFluxer extends AbstractTcpFluxer {
 		    InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
 		    InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
 		    emitLink(connection.channel().id().asLongText(), Link.State.CONNECTED,
-			    new EndPoint(local.getAddress().getHostAddress(), local.getPort()),
-			    new EndPoint(remote.getAddress().getHostAddress(), remote.getPort()));
+			    new EndPoint(local.getAddress().getHostAddress(), Integer.valueOf(local.getPort())),
+			    new EndPoint(remote.getAddress().getHostAddress(), Integer.valueOf(remote.getPort())));
 		})
 		.doOnDisconnected(connection -> {
 		    InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
 		    InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
 		    emitLink(connection.channel().id().asLongText(), Link.State.DISCONNECTED,
-			    new EndPoint(local.getAddress().getHostAddress(), local.getPort()),
-			    new EndPoint(remote.getAddress().getHostAddress(), remote.getPort()));
+			    new EndPoint(local.getAddress().getHostAddress(), Integer.valueOf(local.getPort())),
+			    new EndPoint(remote.getAddress().getHostAddress(), Integer.valueOf(remote.getPort())));
 		})
 		.observe((tcpConnection, newState) -> {
 		})

@@ -2,16 +2,14 @@ package com.github.pointbre.fluxer.core;
 
 import org.slf4j.event.Level;
 
-import lombok.AllArgsConstructor;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
+import com.github.pointbre.fluxer.util.FluxerUtil;
+
 import lombok.NonNull;
-import lombok.ToString;
 import lombok.Value;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-public interface Fluxer extends AutoCloseable {
+public interface Fluxer<T> extends AutoCloseable {
     /**
      * Starts up Fluxer
      * 
@@ -33,7 +31,7 @@ public interface Fluxer extends AutoCloseable {
      * @param remote
      * @return
      */
-    Mono<Result> send(byte[] message, EndPoint remote);
+    Mono<Result> send(T message, EndPoint remote);
 
     /**
      * Provides the stream of {@link State} changes
@@ -54,7 +52,7 @@ public interface Fluxer extends AutoCloseable {
      * 
      * @return {@link Flux} of {@link Message}
      */
-    Flux<Message> message();
+    Flux<Message<T>> message();
 
     /**
      * Provides the stream of Fluxer's {@link Log} changes
@@ -62,32 +60,28 @@ public interface Fluxer extends AutoCloseable {
      * @return {@link Flux} of {@link Log}
      */
     Flux<Log> log();
-    
-    String getIpAddress();
-
-    Integer getPort();
 
     @Value
-    @AllArgsConstructor
-    @Getter
-    @ToString
-    @EqualsAndHashCode
     public class Result {
 	public enum Type {
 	    PROCESSED, FAILED
 	}
 
 	@NonNull
-	private Type type;
+	String uuid;
 	@NonNull
-	private String description;
+	Type type;
+	@NonNull
+	String description;
+
+	public Result(Type type, String description) {
+	    this.uuid = FluxerUtil.generateType1UUID().toString();
+	    this.type = type;
+	    this.description = description;
+	}
     }
 
     @Value
-    @AllArgsConstructor
-    @Getter
-    @ToString
-    @EqualsAndHashCode
     public class State {
 	public enum Type {
 	    STARTING, STARTED, STOPPING, STOPPED
@@ -98,73 +92,107 @@ public interface Fluxer extends AutoCloseable {
 	}
 
 	@NonNull
-	private String id;
+	String uuid;
 	@NonNull
-	private Type type;
-	private Event event;
+	String id;
+	@NonNull
+	Type type;
+	Event event;
+
+	public State(String id, Type type, Event event) {
+	    this.uuid = FluxerUtil.generateType1UUID().toString();
+	    this.id = id;
+	    this.type = type;
+	    this.event = event;
+	}
+
+	public State(String id, Type type) {
+	    this(id, type, null);
+	}
     }
 
     @Value
-    @AllArgsConstructor
-    @Getter
-    @ToString
-    @EqualsAndHashCode
     public class Link {
 	public enum State {
 	    CONNECTED, DISCONNECTED, NONE;
 	}
 
 	@NonNull
-	private String id;
+	String uuid;
 	@NonNull
-	private State state;
+	String id;
 	@NonNull
-	private EndPoint local;
+	State state;
 	@NonNull
-	private EndPoint remote;
+	EndPoint local;
+	@NonNull
+	EndPoint remote;
+
+	public Link(String id, State state, EndPoint local, EndPoint remote) {
+	    this.uuid = FluxerUtil.generateType1UUID().toString();
+	    this.id = id;
+	    this.state = state;
+	    this.local = local;
+	    this.remote = remote;
+	}
     }
 
     @Value
-    @AllArgsConstructor
-    @Getter
-    @ToString
-    @EqualsAndHashCode
     public class EndPoint {
 	@NonNull
-	private String ipAddress;
+	String ipAddress;
 	@NonNull
-	private Integer port;
+	Integer port;
+
+	public EndPoint(String ipAddress, Integer port) {
+	    this.ipAddress = ipAddress;
+	    this.port = port;
+	}
     }
 
     @Value
-    @AllArgsConstructor
-    @Getter
-    @ToString
-    @EqualsAndHashCode
-    public class Message {
+    public class Message<T> {
 	public enum Type {
 	    INBOUND, OUTBOUND;
 	}
 
 	@NonNull
-	private Type type;
+	String uuid;
 	@NonNull
-	private EndPoint local;
+	Type type;
 	@NonNull
-	private EndPoint remote;
+	EndPoint local;
 	@NonNull
-	private byte[] message;
+	EndPoint remote;
+	@NonNull
+	T message;
+
+	public static <T> Message<T> of(Type type, EndPoint local, EndPoint remote, T message) {
+	    return new Message<>(type, local, remote, message);
+	}
+
+	private Message(Type type, EndPoint local, EndPoint remote, T message) {
+	    this.uuid = FluxerUtil.generateType1UUID().toString();
+	    this.type = type;
+	    this.local = local;
+	    this.remote = remote;
+	    this.message = message;
+	}
     }
 
     @Value
-    @AllArgsConstructor
-    @Getter
-    @ToString
-    @EqualsAndHashCode
     public class Log {
 	@NonNull
-	private Level level;
+	String uuid;
 	@NonNull
-	private byte[] log;
+	Level level;
+	@NonNull
+	String log;
+
+	public Log(Level level, String log) {
+	    this.uuid = FluxerUtil.generateType1UUID().toString();
+	    this.level = level;
+	    this.log = log;
+	}
     }
 }

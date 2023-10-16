@@ -15,13 +15,13 @@ public class TrackCoach implements Coach {
 		super();
 	}
 	
-	private void onInit() {
-		System.out.println("onInit");
-	}
-	
-	private void onDestroy() {
-		System.out.println("onDestroy");
-	}
+//	private void onInit() {
+//		System.out.println("onInit");
+//	}
+//	
+//	private void onDestroy() {
+//		System.out.println("onDestroy");
+//	}
 
 
 	@Override

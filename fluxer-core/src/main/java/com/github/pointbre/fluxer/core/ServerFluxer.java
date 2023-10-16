@@ -1,11 +1,8 @@
 package com.github.pointbre.fluxer.core;
 
-import com.github.pointbre.fluxer.core.Fluxer.EndPoint;
-import com.github.pointbre.fluxer.core.Fluxer.Result;
-
 import reactor.core.publisher.Mono;
 
-public interface ServerFluxer {
+public interface ServerFluxer<T> extends TcpFluxer<T> {
 
     Mono<Result> disconnect(EndPoint remote);
 

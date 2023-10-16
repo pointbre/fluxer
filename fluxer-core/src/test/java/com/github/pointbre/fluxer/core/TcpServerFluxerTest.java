@@ -13,11 +13,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.github.pointbre.fluxer.core.Fluxer.Link;
 
-import io.netty.buffer.ByteBufUtil;
 import lombok.Cleanup;
-import lombok.extern.slf4j.Slf4j;
 
-@Slf4j
 @ExtendWith(MockitoExtension.class)
 @ExtendWith(PortNumberExtension.class)
 class TcpServerFluxerTest {
@@ -25,6 +22,7 @@ class TcpServerFluxerTest {
     private static final String LOCALHOST_IP_ADDR = "127.0.0.1";
     private Integer portNumber;
 
+    
     public void setPortNumber(Integer portNumber) {
 	this.portNumber = portNumber;
     }
@@ -32,10 +30,10 @@ class TcpServerFluxerTest {
     @Test
     void test() throws Exception {
 	@Cleanup
-	Fluxer tcpServer = new TcpServerFluxer(LOCALHOST_IP_ADDR, portNumber);
+	Fluxer<byte[]> tcpServer = new TcpServerFluxer(LOCALHOST_IP_ADDR, portNumber);
 
 	@Cleanup
-	final Fluxer tcpClient = new TcpClientFluxer(LOCALHOST_IP_ADDR, portNumber);
+	final Fluxer<byte[]> tcpClient = new TcpClientFluxer(LOCALHOST_IP_ADDR, portNumber);
 
 	final List<Link> serverLinks = new ArrayList<>();
 	final List<Link> clientLinks = new ArrayList<>();

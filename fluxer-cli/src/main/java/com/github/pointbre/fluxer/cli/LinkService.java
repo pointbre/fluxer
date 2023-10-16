@@ -3,16 +3,11 @@ package com.github.pointbre.fluxer.cli;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 
-import org.springframework.stereotype.Service;
-
 import com.github.pointbre.fluxer.core.Fluxer;
-import com.github.pointbre.fluxer.core.TcpServerFluxer;
 
-import lombok.extern.slf4j.Slf4j;
 import reactor.core.Disposable;
 
 //@Service
-@Slf4j
 public class LinkService {
 
 //    private SingleLinkFluxer fluxer = TcpServerFluxer.builder().build();
@@ -73,18 +68,18 @@ public class LinkService {
 
 	@PostConstruct
 	public void postConstruct() throws Exception {
-		Fluxer fluxer = new TcpServerFluxer("localhost", 4501);
-
-		fluxer.start()
-				.doOnError(ex -> log.debug("doOnError " + ex))
-				.doOnSuccess(__ -> {
-					log.debug("doOnSuccess");
-					log.debug("subscribing to streams");
-					statusSubscription = fluxer.state().subscribe(s -> log.debug("Status changed: " + s));
-					linkSubscription = fluxer.link().subscribe(s -> log.debug("Link changed: " + s));
-//					inboundSubscription = fluxer.read().subscribe(m -> log.debug("Inbound changed: " + m));
-				})
-				.subscribe();
+//		Fluxer fluxer = new TcpServerFluxer("localhost", 4501);
+//
+//		fluxer.start()
+//				.doOnError(ex -> log.debug("doOnError " + ex))
+//				.doOnSuccess(__ -> {
+//					log.debug("doOnSuccess");
+//					log.debug("subscribing to streams");
+//					statusSubscription = fluxer.state().subscribe(s -> log.debug("Status changed: " + s));
+//					linkSubscription = fluxer.link().subscribe(s -> log.debug("Link changed: " + s));
+////					inboundSubscription = fluxer.read().subscribe(m -> log.debug("Inbound changed: " + m));
+//				})
+//				.subscribe();
 	}
 
 	@PreDestroy

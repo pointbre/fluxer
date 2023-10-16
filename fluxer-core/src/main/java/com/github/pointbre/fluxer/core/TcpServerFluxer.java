@@ -3,22 +3,20 @@ package com.github.pointbre.fluxer.core;
 import java.net.InetSocketAddress;
 
 import io.netty.channel.ChannelOption;
-import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.netty.ConnectionObserver;
 import reactor.netty.tcp.TcpServer;
 
-@Slf4j
-public class TcpServerFluxer extends AbstractTcpFluxer implements ServerFluxer {
+public class TcpServerFluxer extends AbstractTcpFluxer implements ServerFluxer<byte[]> {
 
     public TcpServerFluxer(String localIPAddress, Integer localPort) throws Exception {
 	super(localIPAddress, localPort);
     }
 
     @Override
-    public Mono<Result> disconnect(EndPoint remote) {
-	Sinks.One<Result> resultSink = Sinks.one();
+    public Mono<Fluxer.Result> disconnect(Fluxer.EndPoint remote) {
+	Sinks.One<Fluxer.Result> resultSink = Sinks.one();
 
 	// TODO: Implement this
 
@@ -41,9 +39,9 @@ public class TcpServerFluxer extends AbstractTcpFluxer implements ServerFluxer {
 
 		    InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
 		    InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
-		    emitLink(connection.channel().id().asLongText(), Link.State.CONNECTED,
-			    new EndPoint(local.getAddress().getHostAddress(), local.getPort()),
-			    new EndPoint(remote.getAddress().getHostAddress(), remote.getPort()));
+		    emitLink(connection.channel().id().asLongText(), Fluxer.Link.State.CONNECTED,
+			    new Fluxer.EndPoint(local.getAddress().getHostAddress().toString(), local.getPort()),
+			    new Fluxer.EndPoint(remote.getAddress().getHostAddress(), remote.getPort()));
 		})
 		.doOnUnbound(disposableServer -> {
 		})
@@ -59,9 +57,9 @@ public class TcpServerFluxer extends AbstractTcpFluxer implements ServerFluxer {
 		    if (newState == ConnectionObserver.State.DISCONNECTING) {
 			InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
 			InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
-			emitLink(connection.channel().id().asLongText(), Link.State.DISCONNECTED,
-				new EndPoint(local.getAddress().getHostAddress(), local.getPort()),
-				new EndPoint(remote.getAddress().getHostAddress(), remote.getPort()));
+			emitLink(connection.channel().id().asLongText(), Fluxer.Link.State.DISCONNECTED,
+				new Fluxer.EndPoint(local.getAddress().getHostAddress(), local.getPort()),
+				new Fluxer.EndPoint(remote.getAddress().getHostAddress(), remote.getPort()));
 		    }
 		})
 		.handle(handler)
@@ -70,40 +68,40 @@ public class TcpServerFluxer extends AbstractTcpFluxer implements ServerFluxer {
 		.wiretap(true)
 		.noSSL();
 
-	Sinks.One<Result> resultSink = getResultSink(State.Event.START_REQUESTED);
+	Sinks.One<Fluxer.Result> resultSink = getResultSink(Fluxer.State.Event.START_REQUESTED);
 	tcpServer.bind()
 		.subscribe(disposableServer -> {
 		    disposableChannel = disposableServer;
-		    sendEvent(State.Event.PROCESSED)
+		    sendEvent(Fluxer.State.Event.PROCESSED)
 			    .subscribe(results -> {
 				if (!isEventAccepted(results)) {
-				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
+				    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED,
 					    "The request can't be accepted as it's currently " + getFluxerState()));
 				} else {
-				    resultSink.tryEmitValue(new Result(Result.Type.PROCESSED,
+				    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.PROCESSED,
 					    "TcpServer successfully started at " + getIpAddress() + ":" + getPort()));
 				}
-				removeResultSink(State.Event.START_REQUESTED);
+				removeResultSink(Fluxer.State.Event.START_REQUESTED);
 			    }, error -> {
-				resultSink.tryEmitValue(new Result(Result.Type.FAILED, error.getLocalizedMessage()));
-				removeResultSink(State.Event.START_REQUESTED);
+				resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED, error.getLocalizedMessage()));
+				removeResultSink(Fluxer.State.Event.START_REQUESTED);
 			    });
 		}, ex -> {
-		    sendEvent(State.Event.FAILED)
+		    sendEvent(Fluxer.State.Event.FAILED)
 			    .subscribe(results -> {
 				if (!isEventAccepted(results)) {
-				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
+				    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED,
 					    "The request can't be accepted as it's currently " + getFluxerState()));
 				} else {
-				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
+				    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED,
 					    "TcpServer failed to start at "
 						    + getIpAddress() + ":" + getPort() + ", "
 						    + ex.getLocalizedMessage()));
 				}
-				removeResultSink(State.Event.START_REQUESTED);
+				removeResultSink(Fluxer.State.Event.START_REQUESTED);
 			    }, error -> {
-				resultSink.tryEmitValue(new Result(Result.Type.FAILED, error.getLocalizedMessage()));
-				removeResultSink(State.Event.START_REQUESTED);
+				resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED, error.getLocalizedMessage()));
+				removeResultSink(Fluxer.State.Event.START_REQUESTED);
 			    });
 		});
 
