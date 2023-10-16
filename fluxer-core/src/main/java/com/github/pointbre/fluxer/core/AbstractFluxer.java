@@ -28,6 +28,7 @@ import reactor.util.concurrent.Queues;
 
 @Slf4j
 public abstract class AbstractFluxer<T> implements Fluxer<T> {
+    private static final int TIMEOUT = 5;
     private Many<Fluxer.State> stateSink;
     private Many<Fluxer.Link> linkSink;
     private Many<Fluxer.Message<T>> messageSink;
@@ -83,16 +84,24 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 		})
 		.log();
 
+	emitLog(Level.INFO, "Starting the internal state machine");
+	final CountDownLatch countDownLatch = new CountDownLatch(1);
 	fluxerMachine = getFluxerStateMachineBuilder().build();
-	// FIXME: Should wait until start finishes using CountDownLatch?
 	fluxerMachine.startReactively()
 		.doOnError(err -> {
-		    emitLog(Level.ERROR, "Fluxer(" + getFluxerMachineId() +") failed to start: " + err.getLocalizedMessage(), err);
+		    emitLog(Level.ERROR, "Failed to start the internal state machine: " + err.getLocalizedMessage(), err);
+		    countDownLatch.countDown();
 		})
 		.doOnSuccess(__ -> {
-		    emitLog(Level.INFO, "Fluxer(" + getFluxerMachineId() +") start");
+		    emitLog(Level.INFO, "The internal state machine has started successfully");
+		    countDownLatch.countDown();
 		})
 		.subscribe();
+	try {
+	    countDownLatch.await(TIMEOUT, TimeUnit.SECONDS);
+	} catch (InterruptedException e) {
+	    emitLog(Level.ERROR, "Starting the internal state machine has timed out");
+	}
     }
 
     @Override
@@ -117,36 +126,42 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 
     @Override
     public void close() throws Exception {
-	emitLog(Level.INFO, "Closing Fluxer(" + getFluxerMachineId() +")");
-	
 	closeLinks();
 
-	if (stateSink != null) {
-	    stateSink.tryEmitComplete();
-	}
-	if (linkSink != null) {
-	    linkSink.tryEmitComplete();
-	}
-	if (messageSink != null) {
-	    messageSink.tryEmitComplete();
-	}
-	if (logSink != null) {
-	    logSink.tryEmitComplete();
-	}
-
+	emitLog(Level.INFO, "Closing the internal state machine");
 	final CountDownLatch countDownLatch = new CountDownLatch(1);
 	if (fluxerMachine != null) {
 	    fluxerMachine.stopReactively().doOnError(err -> {
+		emitLog(Level.ERROR, "Failed to stop the internal state machine: " + err.getLocalizedMessage(), err);
 		countDownLatch.countDown();
 	    }).doOnSuccess(__ -> {
+		emitLog(Level.INFO, "The internal state machine has stopped successfully");
 		countDownLatch.countDown();
 	    }).subscribe();
 	} else {
 	    countDownLatch.countDown();
 	}
 	try {
-	    countDownLatch.await(5, TimeUnit.SECONDS);
+	    countDownLatch.await(TIMEOUT, TimeUnit.SECONDS);
 	} catch (InterruptedException e) {
+	    emitLog(Level.ERROR, "Stopping the internal state machine has timed out");
+	}
+	
+	if (stateSink != null) {
+	    emitLog(Level.INFO, "Closing state flux");
+	    stateSink.tryEmitComplete();
+	}
+	if (linkSink != null) {
+	    emitLog(Level.INFO, "Closing link flux");
+	    linkSink.tryEmitComplete();
+	}
+	if (messageSink != null) {
+	    emitLog(Level.INFO, "Closing message flux");
+	    messageSink.tryEmitComplete();
+	}
+	if (logSink != null) {
+	    emitLog(Level.INFO, "Closing log flux");
+	    logSink.tryEmitComplete();
 	}
     }
 
@@ -208,29 +223,26 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
     }
     
     protected void emitLog(Level level, String description, Throwable throwable) {
-	StringBuffer buf = new StringBuffer();
-	buf.append("[Fluxer:").append(getFluxerMachineId()).append("] ").append(description);
-	
 	switch (level) {
 	case TRACE:
-	    log.trace(buf.toString());
+	    log.trace(description);
 	    break;
 	case DEBUG:
-	    log.debug(buf.toString());
+	    log.debug(description);
 	    break;
 	case INFO:
-	    log.info(buf.toString());
+	    log.info(description);
 	    break;
 	case WARN:
-	    log.warn(buf.toString());
+	    log.warn(description);
 	    break;
 	case ERROR:
-	    log.error(buf.toString());
+	    log.error(description);
 	    break;
 	default:
 	    break;
 	}
-	getLogSink().tryEmitNext(new Fluxer.Log(level, buf.toString(), throwable));
+	getLogSink().tryEmitNext(new Fluxer.Log(level, description, throwable));
     }
 
     protected void emitLog(Level level, String description) {
