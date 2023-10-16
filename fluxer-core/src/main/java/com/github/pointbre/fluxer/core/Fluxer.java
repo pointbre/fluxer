@@ -1,5 +1,7 @@
 package com.github.pointbre.fluxer.core;
 
+import java.time.LocalDateTime;
+
 import org.slf4j.event.Level;
 
 import com.github.pointbre.fluxer.util.FluxerUtil;
@@ -67,12 +69,9 @@ public interface Fluxer<T> extends AutoCloseable {
 	    PROCESSED, FAILED
 	}
 
-	@NonNull
-	String uuid;
-	@NonNull
-	Type type;
-	@NonNull
-	String description;
+	@NonNull String uuid;
+	@NonNull Type type;
+	@NonNull String description;
 
 	public Result(Type type, String description) {
 	    this.uuid = FluxerUtil.generateType1UUID().toString();
@@ -91,12 +90,9 @@ public interface Fluxer<T> extends AutoCloseable {
 	    START_REQUESTED, STOP_REQUESTED, PROCESSED, FAILED;
 	}
 
-	@NonNull
-	String uuid;
-	@NonNull
-	String id;
-	@NonNull
-	Type type;
+	@NonNull String uuid;
+	@NonNull String id;
+	@NonNull Type type;
 	Event event;
 
 	public State(String id, Type type, Event event) {
@@ -117,16 +113,11 @@ public interface Fluxer<T> extends AutoCloseable {
 	    CONNECTED, DISCONNECTED, NONE;
 	}
 
-	@NonNull
-	String uuid;
-	@NonNull
-	String id;
-	@NonNull
-	State state;
-	@NonNull
-	EndPoint local;
-	@NonNull
-	EndPoint remote;
+	@NonNull String uuid;
+	@NonNull String id;
+	@NonNull State state;
+	@NonNull EndPoint local;
+	@NonNull EndPoint remote;
 
 	public Link(String id, State state, EndPoint local, EndPoint remote) {
 	    this.uuid = FluxerUtil.generateType1UUID().toString();
@@ -139,10 +130,8 @@ public interface Fluxer<T> extends AutoCloseable {
 
     @Value
     public class EndPoint {
-	@NonNull
-	String ipAddress;
-	@NonNull
-	Integer port;
+	@NonNull String ipAddress;
+	@NonNull Integer port;
 
 	public EndPoint(String ipAddress, Integer port) {
 	    this.ipAddress = ipAddress;
@@ -156,16 +145,11 @@ public interface Fluxer<T> extends AutoCloseable {
 	    INBOUND, OUTBOUND;
 	}
 
-	@NonNull
-	String uuid;
-	@NonNull
-	Type type;
-	@NonNull
-	EndPoint local;
-	@NonNull
-	EndPoint remote;
-	@NonNull
-	T message;
+	@NonNull String uuid;
+	@NonNull Type type;
+	@NonNull EndPoint local;
+	@NonNull EndPoint remote;
+	@NonNull T message;
 
 	public static <T> Message<T> of(Type type, EndPoint local, EndPoint remote, T message) {
 	    return new Message<>(type, local, remote, message);
@@ -182,17 +166,22 @@ public interface Fluxer<T> extends AutoCloseable {
 
     @Value
     public class Log {
-	@NonNull
-	String uuid;
-	@NonNull
-	Level level;
-	@NonNull
-	String log;
+	@NonNull String uuid;
+	@NonNull LocalDateTime dateTime;
+	@NonNull Level level;
+	@NonNull String description;
+	Throwable throwable;
 
-	public Log(Level level, String log) {
+	public Log(Level level, String log, Throwable throwable) {
 	    this.uuid = FluxerUtil.generateType1UUID().toString();
+	    this.dateTime = LocalDateTime.now();
 	    this.level = level;
-	    this.log = log;
+	    this.description = log;
+	    this.throwable = throwable;
+	}
+	
+	public Log(Level level, String log) {
+	    this(level, log, null);
 	}
     }
 }

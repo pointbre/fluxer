@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import org.slf4j.event.Level;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.statemachine.StateContext;
 import org.springframework.statemachine.StateMachine;
@@ -28,15 +29,13 @@ import reactor.util.concurrent.Queues;
 @Slf4j
 public abstract class AbstractFluxer<T> implements Fluxer<T> {
     private Many<Fluxer.State> stateSink;
-    private Flux<Fluxer.State> stateFlux;
-
     private Many<Fluxer.Link> linkSink;
-    private Flux<Fluxer.Link> linkFlux;
-
     private Many<Fluxer.Message<T>> messageSink;
-    private Flux<Fluxer.Message<T>> messageFlux;
-    
     private Many<Fluxer.Log> logSink;
+    
+    private Flux<Fluxer.State> stateFlux;
+    private Flux<Fluxer.Link> linkFlux;
+    private Flux<Fluxer.Message<T>> messageFlux;
     private Flux<Fluxer.Log> logFlux;
 
     private StateMachine<Fluxer.State.Type, Fluxer.State.Event> fluxerMachine;
@@ -44,57 +43,54 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
     public AbstractFluxer() throws Exception {
 	stateSink = Sinks
 		.many()
-		.multicast()
-		.<Fluxer.State>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
+		.multicast().<Fluxer.State>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
+	linkSink = Sinks
+		.many()
+		.multicast().<Fluxer.Link>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
+	messageSink = Sinks
+		.many()
+		.multicast().<Fluxer.Message<T>>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
+	logSink = Sinks
+		.many()
+		.multicast().<Fluxer.Log>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
+
 	stateFlux = stateSink
 		.asFlux()
 		.publishOn(Schedulers.boundedElastic())
 		.doOnSubscribe(subscriber -> {
-		    log.debug("A new subscriber to status flux: " + subscriber);
+		    emitLog(Level.INFO, "A new subscriber is registered to status flux: " + subscriber);
 		})
 		.log();
-
-	linkSink = Sinks
-		.many()
-		.multicast()
-		.<Fluxer.Link>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
 	linkFlux = linkSink
 		.asFlux()
 		.publishOn(Schedulers.boundedElastic())
 		.doOnSubscribe(subscriber -> {
-		    log.debug("A new subscriber to link flux: " + subscriber);
+		    emitLog(Level.INFO, "A new subscriber is registered to link flux: " + subscriber);
 		})
 		.log();
-
-	messageSink = Sinks
-		.many()
-		.multicast()
-		.<Fluxer.Message<T>>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
 	messageFlux = messageSink
 		.asFlux()
 		.publishOn(Schedulers.boundedElastic())
 		.doOnSubscribe(subscriber -> {
-		    log.debug("A new subscriber to message flux: " + subscriber);
+		    emitLog(Level.INFO, "A new subscriber is registered to message flux: " + subscriber);
 		})
 		.log();
-	
-	logSink = Sinks
-		.many()
-		.multicast()
-		.<Fluxer.Log>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
 	logFlux = logSink
 		.asFlux()
 		.publishOn(Schedulers.boundedElastic())
 		.doOnSubscribe(subscriber -> {
-		    log.debug("A new subscriber to log flux: " + subscriber);
+		    emitLog(Level.INFO, "A new subscriber is registered to log flux: " + subscriber);
 		})
 		.log();
 
 	fluxerMachine = getFluxerStateMachineBuilder().build();
+	// FIXME: Should wait until start finishes using CountDownLatch?
 	fluxerMachine.startReactively()
 		.doOnError(err -> {
+		    emitLog(Level.ERROR, "Fluxer(" + getFluxerMachineId() +") failed to start: " + err.getLocalizedMessage(), err);
 		})
 		.doOnSuccess(__ -> {
+		    emitLog(Level.INFO, "Fluxer(" + getFluxerMachineId() +") start");
 		})
 		.subscribe();
     }
@@ -113,7 +109,7 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
     public Flux<Fluxer.Message<T>> message() {
 	return messageFlux;
     }
-    
+
     @Override
     public Flux<Fluxer.Log> log() {
 	return logFlux;
@@ -121,7 +117,8 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 
     @Override
     public void close() throws Exception {
-
+	emitLog(Level.INFO, "Closing Fluxer(" + getFluxerMachineId() +")");
+	
 	closeLinks();
 
 	if (stateSink != null) {
@@ -172,7 +169,8 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 	fluxerMachine.getExtendedState().getVariables().remove(event);
     }
 
-    protected Mono<List<StateMachineEventResult<Fluxer.State.Type, Fluxer.State.Event>>> sendEvent(Fluxer.State.Event eventToSend) {
+    protected Mono<List<StateMachineEventResult<Fluxer.State.Type, Fluxer.State.Event>>> sendEvent(
+	    Fluxer.State.Event eventToSend) {
 	return fluxerMachine.sendEventCollect(Mono.just(MessageBuilder.withPayload(eventToSend).build()));
     }
 
@@ -180,11 +178,11 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 	return results.stream().anyMatch(result -> result.getResultType().equals(ResultType.ACCEPTED));
     }
 
-    protected Fluxer.State.Type getFluxerState() {
+    protected Fluxer.State.Type getFluxerMachineState() {
 	return fluxerMachine.getState().getId();
     }
-    
-    protected String getFluxerId() {
+
+    protected String getFluxerMachineId() {
 	return fluxerMachine.getUuid().toString();
     }
 
@@ -195,13 +193,48 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
     protected Many<Fluxer.Message<T>> getMessageSink() {
 	return messageSink;
     }
-    
+
+    protected Many<Fluxer.Log> getLogSink() {
+	return logSink;
+    }
+
     protected void emitLink(String id, Fluxer.Link.State state, Fluxer.EndPoint local, Fluxer.EndPoint remote) {
 	getLinkSink().tryEmitNext(new Fluxer.Link(id, state, local, remote));
     }
 
-    protected void emitMessage(Fluxer.Message.Type type, Fluxer.EndPoint local, Fluxer.EndPoint remote, T receivedMessage) {
+    protected void emitMessage(Fluxer.Message.Type type, Fluxer.EndPoint local, Fluxer.EndPoint remote,
+	    T receivedMessage) {
 	getMessageSink().tryEmitNext(Fluxer.Message.<T>of(type, local, remote, receivedMessage));
+    }
+    
+    protected void emitLog(Level level, String description, Throwable throwable) {
+	StringBuffer buf = new StringBuffer();
+	buf.append("[Fluxer:").append(getFluxerMachineId()).append("] ").append(description);
+	
+	switch (level) {
+	case TRACE:
+	    log.trace(buf.toString());
+	    break;
+	case DEBUG:
+	    log.debug(buf.toString());
+	    break;
+	case INFO:
+	    log.info(buf.toString());
+	    break;
+	case WARN:
+	    log.warn(buf.toString());
+	    break;
+	case ERROR:
+	    log.error(buf.toString());
+	    break;
+	default:
+	    break;
+	}
+	getLogSink().tryEmitNext(new Fluxer.Log(level, buf.toString(), throwable));
+    }
+
+    protected void emitLog(Level level, String description) {
+	emitLog(level, description, null);
     }
 
     private Builder<Fluxer.State.Type, Fluxer.State.Event> getFluxerStateMachineBuilder() throws Exception {
@@ -270,6 +303,6 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
     }
 
     private void emitState(Fluxer.State.Type state, Fluxer.State.Event event) {
-	stateSink.tryEmitNext(new Fluxer.State(getFluxerId(), state, event));
+	stateSink.tryEmitNext(new Fluxer.State(getFluxerMachineId(), state, event));
     }
 }

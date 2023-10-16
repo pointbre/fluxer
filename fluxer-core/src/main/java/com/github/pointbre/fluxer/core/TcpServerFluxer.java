@@ -76,7 +76,7 @@ public class TcpServerFluxer extends AbstractTcpFluxer implements ServerFluxer<b
 			    .subscribe(results -> {
 				if (!isEventAccepted(results)) {
 				    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED,
-					    "The request can't be accepted as it's currently " + getFluxerState()));
+					    "The request can't be accepted as it's currently " + getFluxerMachineState()));
 				} else {
 				    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.PROCESSED,
 					    "TcpServer successfully started at " + getIpAddress() + ":" + getPort()));
@@ -91,7 +91,7 @@ public class TcpServerFluxer extends AbstractTcpFluxer implements ServerFluxer<b
 			    .subscribe(results -> {
 				if (!isEventAccepted(results)) {
 				    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED,
-					    "The request can't be accepted as it's currently " + getFluxerState()));
+					    "The request can't be accepted as it's currently " + getFluxerMachineState()));
 				} else {
 				    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED,
 					    "TcpServer failed to start at "

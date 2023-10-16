@@ -56,7 +56,7 @@ public class TcpClientFluxer extends AbstractTcpFluxer implements ClientFluxer<b
 			    .subscribe(results -> {
 				if (!isEventAccepted(results)) {
 				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
-					    "The request can't be accepted as it's currently " + getFluxerState()));
+					    "The request can't be accepted as it's currently " + getFluxerMachineState()));
 				} else {
 				    resultSink.tryEmitValue(new Result(Result.Type.PROCESSED,
 					    "TcpClient successfully started at " + getIpAddress() + ":" + getPort()));
@@ -71,7 +71,7 @@ public class TcpClientFluxer extends AbstractTcpFluxer implements ClientFluxer<b
 			    .subscribe(results -> {
 				if (!isEventAccepted(results)) {
 				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
-					    "The request can't be accepted as it's currently " + getFluxerState()));
+					    "The request can't be accepted as it's currently " + getFluxerMachineState()));
 				} else {
 				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
 					    "TcpClient failed to start at "

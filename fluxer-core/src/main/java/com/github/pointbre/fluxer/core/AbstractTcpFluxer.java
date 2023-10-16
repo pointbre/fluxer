@@ -63,7 +63,7 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 		.subscribe(results -> {
 		    if (!isEventAccepted(results)) {
 			resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED,
-				"The request can't be accepted as it's currently " + getFluxerState()));
+				"The request can't be accepted as it's currently " + getFluxerMachineState()));
 			removeResultSink(Fluxer.State.Event.START_REQUESTED);
 		    }
 		}, error -> {
@@ -83,7 +83,7 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 		.subscribe(results -> {
 		    if (!isEventAccepted(results)) {
 			resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED,
-				"The request can't be accepted as it's currently " + getFluxerState()));
+				"The request can't be accepted as it's currently " + getFluxerMachineState()));
 			removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
 		    }
 		}, error -> {
@@ -117,9 +117,11 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 			.addListener(new ChannelFutureListener() {
 			    @Override
 			    public void operationComplete(ChannelFuture future) throws Exception {
+				System.out.println("writing result=" + future);
 				resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.PROCESSED,
 					"Successfully sent to " + remote + ":" + ByteBufUtil.hexDump(message)));
 				emitMessage(Fluxer.Message.Type.OUTBOUND, local, remote, message);
+				
 			    }
 			});
 	    } else {
@@ -174,7 +176,7 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 			    } else {
 				if (resultSink != null) {
 				    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED,
-					    "The request can't be accepted as it's currently " + getFluxerState()));
+					    "The request can't be accepted as it's currently " + getFluxerMachineState()));
 				    removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
 				}
 			    }
@@ -286,9 +288,9 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 		}).doOnNext(buf -> {
 		    in.withConnection(connection -> {
 //						System.out.println(ByteBufUtil.hexDump(buf) + " from " + connection + "???");
-//			System.out.println(ByteBufUtil.hexDump(buf) + " from " + connection + "???");
-//			System.out.println(connection.channel().localAddress().toString());
-//			System.out.println(connection.channel().remoteAddress().toString());
+			System.out.println("received:" +ByteBufUtil.hexDump(buf));
+			System.out.println("local:" + connection.channel().localAddress().toString());
+			System.out.println("remote:" + connection.channel().remoteAddress().toString());
 			InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
 			InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
 			emitMessage(Fluxer.Message.Type.INBOUND,
