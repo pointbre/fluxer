@@ -2,6 +2,8 @@ package com.github.pointbre.fluxer.core;
 
 import java.net.InetSocketAddress;
 
+import org.slf4j.event.Level;
+
 import io.netty.channel.ChannelOption;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -31,21 +33,25 @@ public class TcpServerFluxer extends AbstractTcpFluxer implements ServerFluxer<b
 		.childOption(ChannelOption.SO_KEEPALIVE, true)
 		.childOption(ChannelOption.SO_LINGER, 0)
 		.doOnBind(tcpServerConfig -> {
+		    emitLog(Level.INFO, "Server's binding started: " + tcpServerConfig);
 		})
 		.doOnBound(disposableServer -> {
+		    emitLog(Level.INFO, "Server's binding done: " + disposableServer);
 		})
 		.doOnConnection(connection -> {
 		    group.add(connection.channel());
-
 		    InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
 		    InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
 		    emitLink(connection.channel().id().asLongText(), Fluxer.Link.State.CONNECTED,
 			    new Fluxer.EndPoint(local.getAddress().getHostAddress().toString(), local.getPort()),
 			    new Fluxer.EndPoint(remote.getAddress().getHostAddress(), remote.getPort()));
+		    emitLog(Level.INFO, "A new connection is established: " + connection.channel());
 		})
 		.doOnUnbound(disposableServer -> {
+		    emitLog(Level.INFO, "Server's unbinding done: " + disposableServer);
 		})
 		.doOnChannelInit((connectionObserver, channel, remoteAddress) -> {
+		    emitLog(Level.INFO, "Server's channel is initialized");
 		})
 		.channelGroup(group).childObserve((connection, newState) -> {
 		    // See ConnectionObserver.State
@@ -60,6 +66,7 @@ public class TcpServerFluxer extends AbstractTcpFluxer implements ServerFluxer<b
 			emitLink(connection.channel().id().asLongText(), Fluxer.Link.State.DISCONNECTED,
 				new Fluxer.EndPoint(local.getAddress().getHostAddress(), local.getPort()),
 				new Fluxer.EndPoint(remote.getAddress().getHostAddress(), remote.getPort()));
+			emitLog(Level.INFO, "The connection is closed: " + connection.channel());
 		    }
 		})
 		.handle(handler)

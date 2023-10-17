@@ -309,6 +309,7 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 	return new Action<Fluxer.State.Type, Fluxer.State.Event>() {
 	    @Override
 	    public void execute(StateContext<Fluxer.State.Type, Fluxer.State.Event> context) {
+		emitLog(Level.INFO, "The state of the internal state machine has changed: " + context);
 		emitState(context.getTransition().getTarget().getId(), context.getEvent());
 	    }
 	};

@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 
 import org.reactivestreams.Publisher;
+import org.slf4j.event.Level;
 import org.springframework.statemachine.StateContext;
 import org.springframework.statemachine.action.Action;
 
@@ -32,6 +33,7 @@ import reactor.netty.NettyOutbound;
 
 public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implements TcpFluxer<byte[]> {
 
+    private static final int MAX_WAIT = 5;
     private final String ipAddress;
     private final Integer port;
 
@@ -44,10 +46,14 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 	super();
 
 	if (ipAddress == null || ipAddress.isBlank()) {
-	    throw new IllegalArgumentException("Invalid ip address: must not be null or blank");
+	    Exception exception = new IllegalArgumentException("Invalid ip address: must not be null or blank");
+	    emitLog(Level.ERROR, "The given ip address is invalid", exception);
+	    throw exception;
 	}
 	if (port <= 0 || port >= 65536) {
-	    throw new IllegalArgumentException("Invalid port: must be >= 1 and <= 65535");
+	    Exception exception = new IllegalArgumentException("Invalid port: must be >= 1 and <= 65535");
+	    emitLog(Level.ERROR, "The given port number is invalid", exception);
+	    throw exception;
 	}
 
 	this.ipAddress = ipAddress;
@@ -62,13 +68,18 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 	sendEvent(Fluxer.State.Event.START_REQUESTED)
 		.subscribe(results -> {
 		    if (!isEventAccepted(results)) {
-			resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED,
-				"The request can't be accepted as it's currently " + getFluxerMachineState()));
+			String log = "START_REQUESTED event wasn't accepted as it's currently "
+				+ getFluxerMachineState();
+			resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED, log));
 			removeResultSink(Fluxer.State.Event.START_REQUESTED);
+			emitLog(Level.ERROR, log);
+		    } else {
+			emitLog(Level.INFO, "Sent START_REQUESTED successfully");
 		    }
 		}, error -> {
 		    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED, error.getLocalizedMessage()));
 		    removeResultSink(Fluxer.State.Event.START_REQUESTED);
+		    emitLog(Level.ERROR, "Failed to send START_REQUESTED event:" + error.getLocalizedMessage(), error);
 		});
 
 	return resultSink.asMono();
@@ -82,13 +93,18 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 	sendEvent(Fluxer.State.Event.STOP_REQUESTED)
 		.subscribe(results -> {
 		    if (!isEventAccepted(results)) {
-			resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED,
-				"The request can't be accepted as it's currently " + getFluxerMachineState()));
+			String log = "STOP_REQUESTED event wasn't accepted as it's currently "
+				+ getFluxerMachineState();
+			resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED, log));
 			removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
+			emitLog(Level.ERROR, log);
+		    } else {
+			emitLog(Level.INFO, "Sent START_REQUESTED successfully");
 		    }
 		}, error -> {
 		    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED, error.getLocalizedMessage()));
 		    removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
+		    emitLog(Level.ERROR, "Failed to send STOP_REQUESTED event:" + error.getLocalizedMessage());
 		});
 
 	return resultSink.asMono();
@@ -112,21 +128,27 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 
 	    if (linkFound) {
 		InetSocketAddress localAddress = (InetSocketAddress) channel.localAddress();
-		final Fluxer.EndPoint local = new Fluxer.EndPoint(localAddress.getAddress().getHostAddress(), localAddress.getPort());
+		final Fluxer.EndPoint local = new Fluxer.EndPoint(localAddress.getAddress().getHostAddress(),
+			localAddress.getPort());
 		channel.writeAndFlush(Unpooled.wrappedBuffer(message))
 			.addListener(new ChannelFutureListener() {
 			    @Override
 			    public void operationComplete(ChannelFuture future) throws Exception {
-				System.out.println("writing result=" + future);
-				resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.PROCESSED,
-					"Successfully sent to " + remote + ":" + ByteBufUtil.hexDump(message)));
+				String log = "Successfully sent to " + remote + ":" + ByteBufUtil.hexDump(message);
+				resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.PROCESSED, log));
 				emitMessage(Fluxer.Message.Type.OUTBOUND, local, remote, message);
-				
+				emitLog(Level.INFO, log);
 			    }
 			});
 	    } else {
-		resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED, "Matching link is not found: " + remote));
+		String log = "Failed to send a message as matching link is not found: " + remote;
+		resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED, log));
+		emitLog(Level.ERROR, log);
 	    }
+	} else {
+	    String log = "Failed to send a message as no link is not found: " + remote;
+	    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED, log));
+	    emitLog(Level.ERROR, log);
 	}
 
 	return resultSink.asMono();
@@ -170,20 +192,36 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 			.subscribe(results -> {
 			    if (isEventAccepted(results)) {
 				if (resultSink != null) {
-				    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.PROCESSED, "Successfully stopped"));
+				    String log = "Successfully stopped";
+				    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.PROCESSED, log));
 				    removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
+				    emitLog(Level.INFO, log);
+				} else {
+				    emitLog(Level.ERROR,
+					    "Not possible to reply PROCESSED as the result sink of STOP_REQUESTED is not available");
 				}
 			    } else {
 				if (resultSink != null) {
-				    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED,
-					    "The request can't be accepted as it's currently " + getFluxerMachineState()));
+				    String log = "PROCESSED event wasn't accepted as it's currently "
+					    + getFluxerMachineState();
+				    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED, log));
 				    removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
+				    emitLog(Level.ERROR, log);
+				} else {
+				    emitLog(Level.ERROR,
+					    "Not possible to reply FAILED as the result sink of STOP_REQUESTED is not available");
 				}
 			    }
 			}, error -> {
 			    if (resultSink != null) {
-				resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED, error.getLocalizedMessage()));
+				resultSink.tryEmitValue(
+					new Fluxer.Result(Fluxer.Result.Type.FAILED, error.getLocalizedMessage()));
 				removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
+				emitLog(Level.ERROR,
+					"Failed to send START_REQUESTED event:" + error.getLocalizedMessage(), error);
+			    } else {
+				emitLog(Level.ERROR,
+					"Not possible to reply FAILED as the result sink of STOP_REQUESTED is not available");
 			    }
 			});
 	    }
@@ -191,23 +229,28 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
     }
 
     protected void closeLinks() {
+	emitLog(Level.INFO, "Closing link related resources");
+
 	final CountDownLatch countDownLatch1 = new CountDownLatch(1);
 	if (disposableChannel != null) {
 	    disposableChannel.dispose();
 	    disposableChannel
 		    .onDispose()
-		    .doOnError(err -> {
+		    .doOnError(error -> {
+			emitLog(Level.ERROR, "Failed to close channel", error);
 			countDownLatch1.countDown();
 		    })
 		    .doOnSuccess(__ -> {
+			emitLog(Level.INFO, "Closed channel");
 			countDownLatch1.countDown();
 		    })
 		    .subscribe();
 	} else {
+	    emitLog(Level.INFO, "No need of closing channel as it's null");
 	    countDownLatch1.countDown();
 	}
 	try {
-	    countDownLatch1.await(5, TimeUnit.SECONDS);
+	    countDownLatch1.await(MAX_WAIT, TimeUnit.SECONDS);
 	} catch (InterruptedException e) {
 	}
 
@@ -216,14 +259,16 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 	    group.disconnect().addListener(new ChannelGroupFutureListener() {
 		@Override
 		public void operationComplete(ChannelGroupFuture future) throws Exception {
+		    emitLog(Level.INFO, "Disconnected group");
 		    countDownLatch2.countDown();
 		}
 	    });
 	} else {
+	    emitLog(Level.INFO, "No need of disconnecting group as it's null");
 	    countDownLatch2.countDown();
 	}
 	try {
-	    countDownLatch2.await(5, TimeUnit.SECONDS);
+	    countDownLatch2.await(MAX_WAIT, TimeUnit.SECONDS);
 	} catch (InterruptedException e) {
 	}
 
@@ -232,14 +277,16 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 	    group.close().addListener(new ChannelGroupFutureListener() {
 		@Override
 		public void operationComplete(ChannelGroupFuture future) throws Exception {
+		    emitLog(Level.INFO, "Closed group");
 		    countDownLatch3.countDown();
 		}
 	    });
 	} else {
+	    emitLog(Level.INFO, "No need of closing channel as it's null");
 	    countDownLatch3.countDown();
 	}
 	try {
-	    countDownLatch3.await(5, TimeUnit.SECONDS);
+	    countDownLatch3.await(MAX_WAIT, TimeUnit.SECONDS);
 	} catch (InterruptedException e) {
 	}
 
@@ -248,19 +295,23 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 	    executor.shutdownGracefully().addListener(new GenericFutureListener<Future<Object>>() {
 		@Override
 		public void operationComplete(Future<Object> future) throws Exception {
+		    emitLog(Level.INFO, "Closed executor");
 		    countDownLatch4.countDown();
 		}
 	    });
 	} else {
+	    emitLog(Level.INFO, "No need of closing executor as it's null");
 	    countDownLatch4.countDown();
 	}
 	try {
-	    countDownLatch4.await(5, TimeUnit.SECONDS);
+	    countDownLatch4.await(MAX_WAIT, TimeUnit.SECONDS);
 	} catch (InterruptedException e) {
 	}
+
 	disposableChannel = null;
 	group = null;
 	executor = null;
+	emitLog(Level.INFO, "Link related resources are closed");
     }
 
     private boolean isSameLink(@NonNull Channel channel, @NonNull EndPoint remote) {
@@ -268,7 +319,7 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 	if (remote.getIpAddress().equals(channelRemoteAddress.getAddress().getHostAddress())
 		&& remote.getPort().equals(Integer.valueOf(channelRemoteAddress.getPort()))) {
 	    return true;
-	}	
+	}
 
 	return false;
     }
@@ -277,42 +328,19 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 	return new BiFunction<NettyInbound, NettyOutbound, Publisher<Void>>() {
 	    @Override
 	    public Publisher<Void> apply(NettyInbound in, NettyOutbound out) {
-		in.withConnection(tcpConnection -> {
-//		    System.out.println("withConnection");
-//		    System.out.println(tcpConnection.channel().localAddress().toString());
-//		    System.out.println(tcpConnection.channel().remoteAddress().toString());
-		}).receive().asByteArray().doOnCancel(() -> {
-//		    System.out.println("in doOnCancel");
-		}).doOnComplete(() -> {
-//		    System.out.println("in doOnComplete");
-		}).doOnNext(buf -> {
+		in.receive().asByteArray().doOnNext(buf -> {
 		    in.withConnection(connection -> {
-//						System.out.println(ByteBufUtil.hexDump(buf) + " from " + connection + "???");
-			System.out.println("received:" +ByteBufUtil.hexDump(buf));
-			System.out.println("local:" + connection.channel().localAddress().toString());
-			System.out.println("remote:" + connection.channel().remoteAddress().toString());
 			InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
 			InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
 			emitMessage(Fluxer.Message.Type.INBOUND,
 				new Fluxer.EndPoint(local.getAddress().getHostAddress(), local.getPort()),
 				new Fluxer.EndPoint(remote.getAddress().getHostAddress(), remote.getPort()), buf);
-
+			String log = "A new message is received from " + connection.channel().localAddress().toString();
+			emitLog(Level.INFO, log);
 		    });
-		}).doOnError(e -> {
-//		    System.out.println("in doOnError " + e);
-		}).doOnSubscribe(s -> {
-//		    System.out.println("in doOnSubscribe " + s);
-		}).doOnTerminate(() -> {
-//		    System.out.println("in doOnTerminate");
 		}).subscribe();
 
-		return out.neverComplete().doOnTerminate(() -> {
-//		    System.out.println("out doOnTerminate");
-		}).doOnError(ex -> {
-//		    System.out.println("out doOnError: " + ex.getMessage());
-		}).doOnCancel(() -> {
-//		    System.out.println("out doOnCancel");
-		});
+		return out.neverComplete();
 	    }
 	};
     }
