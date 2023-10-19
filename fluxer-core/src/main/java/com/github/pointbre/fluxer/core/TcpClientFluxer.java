@@ -2,6 +2,8 @@ package com.github.pointbre.fluxer.core;
 
 import java.net.InetSocketAddress;
 
+import org.slf4j.event.Level;
+
 import io.netty.channel.ChannelOption;
 import reactor.core.publisher.Sinks;
 import reactor.netty.tcp.TcpClient;
@@ -32,6 +34,7 @@ public class TcpClientFluxer extends AbstractTcpFluxer implements ClientFluxer<b
 		    emitLink(connection.channel().id().asLongText(), Link.State.CONNECTED,
 			    new EndPoint(local.getAddress().getHostAddress(), Integer.valueOf(local.getPort())),
 			    new EndPoint(remote.getAddress().getHostAddress(), Integer.valueOf(remote.getPort())));
+		    emitLog(Level.INFO, "A new connection is established: " + connection.channel());
 		})
 		.doOnDisconnected(connection -> {
 		    InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
@@ -39,6 +42,7 @@ public class TcpClientFluxer extends AbstractTcpFluxer implements ClientFluxer<b
 		    emitLink(connection.channel().id().asLongText(), Link.State.DISCONNECTED,
 			    new EndPoint(local.getAddress().getHostAddress(), Integer.valueOf(local.getPort())),
 			    new EndPoint(remote.getAddress().getHostAddress(), Integer.valueOf(remote.getPort())));
+		    emitLog(Level.INFO, "The existing connection is terminated: " + connection.channel());
 		})
 		.observe((tcpConnection, newState) -> {
 		})
@@ -55,33 +59,37 @@ public class TcpClientFluxer extends AbstractTcpFluxer implements ClientFluxer<b
 		    sendEvent(State.Event.PROCESSED)
 			    .subscribe(results -> {
 				if (!isEventAccepted(results)) {
-				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
-					    "The request can't be accepted as it's currently " + getFluxerMachineState()));
+				    String log = "PROCESSED event wasn't accepted as it's currently " + getFluxerMachineState();
+				    resultSink.tryEmitValue(new Result(Result.Type.FAILED, log));
+				    emitLog(Level.ERROR, log);
 				} else {
-				    resultSink.tryEmitValue(new Result(Result.Type.PROCESSED,
-					    "TcpClient successfully started at " + getIpAddress() + ":" + getPort()));
+				    String log = "TcpClient successfully started at " + getIpAddress() + ":" + getPort();
+				    resultSink.tryEmitValue(new Result(Result.Type.PROCESSED, log));
+				    emitLog(Level.INFO, log);
 				}
 				removeResultSink(State.Event.START_REQUESTED);
 			    }, error -> {
 				resultSink.tryEmitValue(new Result(Result.Type.FAILED, error.getLocalizedMessage()));
 				removeResultSink(State.Event.START_REQUESTED);
+				emitLog(Level.ERROR, "Failed to send PROCESSED event:" + error.getLocalizedMessage(), error);
 			    });
 		}, ex -> {
 		    sendEvent(State.Event.FAILED)
 			    .subscribe(results -> {
 				if (!isEventAccepted(results)) {
-				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
-					    "The request can't be accepted as it's currently " + getFluxerMachineState()));
+				    String log = "PROCESSED event wasn't accepted as it's currently " + getFluxerMachineState();
+				    resultSink.tryEmitValue(new Result(Result.Type.FAILED, log));
+				    emitLog(Level.ERROR, log);
 				} else {
-				    resultSink.tryEmitValue(new Result(Result.Type.FAILED,
-					    "TcpClient failed to start at "
-						    + getIpAddress() + ":" + getPort() + ", "
-						    + ex.getLocalizedMessage()));
+				    String log = "TcpClient failed to start at " + getIpAddress() + ":" + getPort();
+				    resultSink.tryEmitValue(new Result(Result.Type.FAILED, log + ":" + getPort() + ", " + ex.getLocalizedMessage()));
+				    emitLog(Level.ERROR, log, ex);
 				}
 				removeResultSink(State.Event.START_REQUESTED);
 			    }, error -> {
 				resultSink.tryEmitValue(new Result(Result.Type.FAILED, error.getLocalizedMessage()));
 				removeResultSink(State.Event.START_REQUESTED);
+				emitLog(Level.ERROR, "Failed to send FAILED event:" + error.getLocalizedMessage(), error);
 			    });
 		});
     }

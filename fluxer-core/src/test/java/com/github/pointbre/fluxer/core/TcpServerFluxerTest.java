@@ -38,46 +38,46 @@ class TcpServerFluxerTest {
 	final List<Link> clientLinks = new ArrayList<>();
 
 	// Subscribe to state right after tcp server instance is created
-//	tcpServer.state()
-//		.doOnError(error -> {
-//		    fail("Shouldn't throw an error");
-//		}).doOnNext(state -> {
-//		    System.out.println("subscriber 1 | Server state received: " + state);
-//		}).doOnComplete(new Runnable() {
-//		    @Override
-//		    public void run() {
-//			System.out.println(
-//				"subscriber 1 | Server state completed");
-//		    }
-//		}).subscribe();
-//
-//	tcpServer.link()
-//		.doOnError(error -> {
-//		    fail("Shouldn't throw an error");
-//		}).doOnNext(link -> {
-//		    serverLinks.add(link);
-//		    System.out.println("subscriber 1 | Server link received: " + link + ", currently "
-//			    + serverLinks.size() + " connected");
-//		}).doOnComplete(new Runnable() {
-//		    @Override
-//		    public void run() {
-//			System.out.println(
-//				"subscriber 1 | Server link completed");
-//		    }
-//		}).subscribe();
-//
-//	tcpServer.message()
-//		.doOnError(error -> {
-//		    fail("Shouldn't throw an error");
-//		}).doOnNext(message -> {
-//		    System.out.println("subscriber 1 | Server message received: " + message);
-//		}).doOnComplete(new Runnable() {
-//		    @Override
-//		    public void run() {
-//			System.out.println(
-//				"subscriber 1 | Server message completed");
-//		    }
-//		}).subscribe();
+	tcpServer.state()
+		.doOnError(error -> {
+		    fail("Shouldn't throw an error");
+		}).doOnNext(state -> {
+		    System.out.println("subscriber 1 | Server state received: " + state);
+		}).doOnComplete(new Runnable() {
+		    @Override
+		    public void run() {
+			System.out.println(
+				"subscriber 1 | Server state completed");
+		    }
+		}).subscribe();
+
+	tcpServer.link()
+		.doOnError(error -> {
+		    fail("Shouldn't throw an error");
+		}).doOnNext(link -> {
+		    serverLinks.add(link);
+		    System.out.println("subscriber 1 | Server link received: " + link + ", currently "
+			    + serverLinks.size() + " connected");
+		}).doOnComplete(new Runnable() {
+		    @Override
+		    public void run() {
+			System.out.println(
+				"subscriber 1 | Server link completed");
+		    }
+		}).subscribe();
+
+	tcpServer.message()
+		.doOnError(error -> {
+		    fail("Shouldn't throw an error");
+		}).doOnNext(message -> {
+		    System.out.println("subscriber 1 | Server message received: " + message);
+		}).doOnComplete(new Runnable() {
+		    @Override
+		    public void run() {
+			System.out.println(
+				"subscriber 1 | Server message completed");
+		    }
+		}).subscribe();
 
 	tcpServer.log()
 		.doOnError(error -> {
@@ -92,143 +92,143 @@ class TcpServerFluxerTest {
 		    }
 		}).subscribe();
 
-//	tcpClient.state()
-//		.doOnError(error -> {
-//		    fail("Shouldn't throw an error");
-//		}).doOnNext(state -> {
-//		    System.out.println("subscriber 1 | client state received: " + state);
-//		}).doOnComplete(new Runnable() {
-//		    @Override
-//		    public void run() {
-//			System.out.println(
-//				"subscriber 1 | client state completed");
-//		    }
-//		}).subscribe();
+	tcpClient.state()
+		.doOnError(error -> {
+		    fail("Shouldn't throw an error");
+		}).doOnNext(state -> {
+		    System.out.println("subscriber 1 | client state received: " + state);
+		}).doOnComplete(new Runnable() {
+		    @Override
+		    public void run() {
+			System.out.println(
+				"subscriber 1 | client state completed");
+		    }
+		}).subscribe();
 
-//	tcpClient.link()
-//		.doOnError(error -> {
-//		    fail("Shouldn't throw an error");
-//		}).doOnNext(link -> {
-//		    clientLinks.add(link);
-//		    System.out.println("subscriber 1 | client link received: " + link);
-//		}).doOnComplete(new Runnable() {
-//		    @Override
-//		    public void run() {
-//			System.out.println(
-//				"subscriber 1 | client link completed");
-//		    }
-//		}).subscribe();
+	tcpClient.link()
+		.doOnError(error -> {
+		    fail("Shouldn't throw an error");
+		}).doOnNext(link -> {
+		    clientLinks.add(link);
+		    System.out.println("subscriber 1 | client link received: " + link);
+		}).doOnComplete(new Runnable() {
+		    @Override
+		    public void run() {
+			System.out.println(
+				"subscriber 1 | client link completed");
+		    }
+		}).subscribe();
 
-//	tcpClient.message()
-//		.doOnError(error -> {
-//		    fail("Shouldn't throw an error");
-//		}).doOnNext(message -> {
-//		    System.out.println("subscriber 1 | client message received: " + message);
-//		}).doOnComplete(new Runnable() {
-//		    @Override
-//		    public void run() {
-//			System.out.println(
-//				"subscriber 1 | client message completed");
-//		    }
-//		}).subscribe();
+	tcpClient.message()
+		.doOnError(error -> {
+		    fail("Shouldn't throw an error");
+		}).doOnNext(message -> {
+		    System.out.println("subscriber 1 | client message received: " + message);
+		}).doOnComplete(new Runnable() {
+		    @Override
+		    public void run() {
+			System.out.println(
+				"subscriber 1 | client message completed");
+		    }
+		}).subscribe();
 
-//	long now1 = System.currentTimeMillis();
-//	final CountDownLatch countDownLatch1 = new CountDownLatch(1);
-//	tcpServer.start().doOnError(err -> {
-//	    countDownLatch1.countDown();
-//	    System.out.println(System.currentTimeMillis() + ":Server failed to start at " + portNumber);
-//	}).doOnSuccess(result -> {
-//	    countDownLatch1.countDown();
-//	    System.out.println(System.currentTimeMillis() + ":" + result);
-//	    System.out.println("Server starting took " + (System.currentTimeMillis() - now1));
-//	}).subscribe();
-//	try {
-//	    countDownLatch1.await(5, TimeUnit.SECONDS);
-//	} catch (InterruptedException e) {
-//	    fail("Server failed to start");
-//	}
-//
-//	long now2 = System.currentTimeMillis();
-//	final CountDownLatch countDownLatch2 = new CountDownLatch(1);
-//	tcpClient.start().doOnError(err -> {
-//	    countDownLatch2.countDown();
-//	    System.out.println(System.currentTimeMillis() + ":client failed to start at " + portNumber);
-//	}).doOnSuccess(result -> {
-//	    countDownLatch2.countDown();
-//	    System.out.println(System.currentTimeMillis() + ":" + result);
-//	    System.out.println("Client starting took " + (System.currentTimeMillis() - now2));
-//	}).subscribe();
-//	try {
-//	    countDownLatch2.await(5, TimeUnit.SECONDS);
-//	} catch (InterruptedException e) {
-//	    fail("Client failed to start");
-//	}
-//
-//	long now4 = System.currentTimeMillis();
-//	final CountDownLatch countDownLatch4 = new CountDownLatch(1);
-//	tcpClient.stop().doOnError(err -> {
-//	    countDownLatch4.countDown();
-//	    System.out.println(System.currentTimeMillis() + ":client failed to stop");
-//	}).doOnSuccess(result -> {
-//	    countDownLatch4.countDown();
-//	    System.out.println(
-//		    System.currentTimeMillis() + ":client stops");
-//	    System.out.println("Client stopping took " + (System.currentTimeMillis() - now4));
-//	}).subscribe();
-//	try {
-//	    countDownLatch4.await(5, TimeUnit.SECONDS);
-//	} catch (InterruptedException e) {
-//	    fail("Client failed to stop in time");
-//	}
-//
-//	long now5 = System.currentTimeMillis();
-//	final CountDownLatch countDownLatch5 = new CountDownLatch(1);
-//	tcpClient.start().doOnError(err -> {
-//	    countDownLatch5.countDown();
-//	    System.out.println(System.currentTimeMillis() + ":client failed to start at " + portNumber);
-//	}).doOnSuccess(result -> {
-//	    countDownLatch5.countDown();
-//	    System.out.println(
-//		    System.currentTimeMillis() + ":client starts again at " + portNumber);
-//	    System.out.println("Client starting again took " + (System.currentTimeMillis() - now5));
-//	}).subscribe();
-//	try {
-//	    countDownLatch5.await(5, TimeUnit.SECONDS);
-//	} catch (InterruptedException e) {
-//	    fail("Client failed to start again");
-//	}
-//
-//	long now6 = System.currentTimeMillis();
-//	final CountDownLatch countDownLatch6 = new CountDownLatch(1);
-//	tcpServer.send("ABC".getBytes(), serverLinks.get(serverLinks.size() - 1).getRemote()).doOnError(err -> {
-//	    countDownLatch6.countDown();
-//	    System.out.println(">>> server failed to send to " + serverLinks.get(serverLinks.size() - 1).getRemote());
-//	}).doOnSuccess(result -> {
-//	    countDownLatch6.countDown();
-//	    System.out.println(">>> server send() to " + serverLinks.get(serverLinks.size() - 1).getRemote());
-//	    System.out.println(">>> server send() took " + (System.currentTimeMillis() - now6));
-//	}).subscribe();
-//	try {
-//	    countDownLatch6.await(5, TimeUnit.SECONDS);
-//	} catch (InterruptedException e) {
-//	    fail("server failed to send again");
-//	}
-//
-//	long now7 = System.currentTimeMillis();
-//	final CountDownLatch countDownLatch7 = new CountDownLatch(1);
-//	tcpClient.send("123".getBytes(), serverLinks.get(serverLinks.size() - 1).getLocal()).doOnError(err -> {
-//	    countDownLatch7.countDown();
-//	    System.out.println(">>> client failed to send to " + serverLinks.get(serverLinks.size() - 1).getRemote());
-//	}).doOnSuccess(result -> {
-//	    countDownLatch7.countDown();
-//	    System.out.println(">>> client send() to " + serverLinks.get(serverLinks.size() - 1).getRemote());
-//	    System.out.println(">>> client send() took " + (System.currentTimeMillis() - now7));
-//	}).subscribe();
-//	try {
-//	    countDownLatch7.await(5, TimeUnit.SECONDS);
-//	} catch (InterruptedException e) {
-//	    fail("client failed to send again");
-//	}
+	long now1 = System.currentTimeMillis();
+	final CountDownLatch countDownLatch1 = new CountDownLatch(1);
+	tcpServer.start().doOnError(err -> {
+	    countDownLatch1.countDown();
+	    System.out.println(System.currentTimeMillis() + ":Server failed to start at " + portNumber);
+	}).doOnSuccess(result -> {
+	    countDownLatch1.countDown();
+	    System.out.println(System.currentTimeMillis() + ":" + result);
+	    System.out.println("Server starting took " + (System.currentTimeMillis() - now1));
+	}).subscribe();
+	try {
+	    countDownLatch1.await(5, TimeUnit.SECONDS);
+	} catch (InterruptedException e) {
+	    fail("Server failed to start");
+	}
+
+	long now2 = System.currentTimeMillis();
+	final CountDownLatch countDownLatch2 = new CountDownLatch(1);
+	tcpClient.start().doOnError(err -> {
+	    countDownLatch2.countDown();
+	    System.out.println(System.currentTimeMillis() + ":client failed to start at " + portNumber);
+	}).doOnSuccess(result -> {
+	    countDownLatch2.countDown();
+	    System.out.println(System.currentTimeMillis() + ":" + result);
+	    System.out.println("Client starting took " + (System.currentTimeMillis() - now2));
+	}).subscribe();
+	try {
+	    countDownLatch2.await(5, TimeUnit.SECONDS);
+	} catch (InterruptedException e) {
+	    fail("Client failed to start");
+	}
+
+	long now4 = System.currentTimeMillis();
+	final CountDownLatch countDownLatch4 = new CountDownLatch(1);
+	tcpClient.stop().doOnError(err -> {
+	    countDownLatch4.countDown();
+	    System.out.println(System.currentTimeMillis() + ":client failed to stop");
+	}).doOnSuccess(result -> {
+	    countDownLatch4.countDown();
+	    System.out.println(
+		    System.currentTimeMillis() + ":client stops");
+	    System.out.println("Client stopping took " + (System.currentTimeMillis() - now4));
+	}).subscribe();
+	try {
+	    countDownLatch4.await(5, TimeUnit.SECONDS);
+	} catch (InterruptedException e) {
+	    fail("Client failed to stop in time");
+	}
+
+	long now5 = System.currentTimeMillis();
+	final CountDownLatch countDownLatch5 = new CountDownLatch(1);
+	tcpClient.start().doOnError(err -> {
+	    countDownLatch5.countDown();
+	    System.out.println(System.currentTimeMillis() + ":client failed to start at " + portNumber);
+	}).doOnSuccess(result -> {
+	    countDownLatch5.countDown();
+	    System.out.println(
+		    System.currentTimeMillis() + ":client starts again at " + portNumber);
+	    System.out.println("Client starting again took " + (System.currentTimeMillis() - now5));
+	}).subscribe();
+	try {
+	    countDownLatch5.await(5, TimeUnit.SECONDS);
+	} catch (InterruptedException e) {
+	    fail("Client failed to start again");
+	}
+
+	long now6 = System.currentTimeMillis();
+	final CountDownLatch countDownLatch6 = new CountDownLatch(1);
+	tcpServer.send("ABC".getBytes(), serverLinks.get(serverLinks.size() - 1).getRemote()).doOnError(err -> {
+	    countDownLatch6.countDown();
+	    System.out.println(">>> server failed to send to " + serverLinks.get(serverLinks.size() - 1).getRemote());
+	}).doOnSuccess(result -> {
+	    countDownLatch6.countDown();
+	    System.out.println(">>> server send() to " + serverLinks.get(serverLinks.size() - 1).getRemote());
+	    System.out.println(">>> server send() took " + (System.currentTimeMillis() - now6));
+	}).subscribe();
+	try {
+	    countDownLatch6.await(5, TimeUnit.SECONDS);
+	} catch (InterruptedException e) {
+	    fail("server failed to send again");
+	}
+
+	long now7 = System.currentTimeMillis();
+	final CountDownLatch countDownLatch7 = new CountDownLatch(1);
+	tcpClient.send("123".getBytes(), serverLinks.get(serverLinks.size() - 1).getLocal()).doOnError(err -> {
+	    countDownLatch7.countDown();
+	    System.out.println(">>> client failed to send to " + serverLinks.get(serverLinks.size() - 1).getRemote());
+	}).doOnSuccess(result -> {
+	    countDownLatch7.countDown();
+	    System.out.println(">>> client send() to " + serverLinks.get(serverLinks.size() - 1).getRemote());
+	    System.out.println(">>> client send() took " + (System.currentTimeMillis() - now7));
+	}).subscribe();
+	try {
+	    countDownLatch7.await(5, TimeUnit.SECONDS);
+	} catch (InterruptedException e) {
+	    fail("client failed to send again");
+	}
 
 	System.out.println("...");
 	Thread.sleep(5000);
