@@ -27,6 +27,7 @@ import io.netty.util.concurrent.GenericFutureListener;
 import lombok.NonNull;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
+import reactor.core.scheduler.Schedulers;
 import reactor.netty.DisposableChannel;
 import reactor.netty.NettyInbound;
 import reactor.netty.NettyOutbound;
@@ -62,11 +63,15 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 
     @Override
     public Mono<Fluxer.Result> start() {
-	Sinks.One<Fluxer.Result> resultSink = Sinks.one();
+	System.out.println("(A)" + Thread.currentThread().getName());
+	final Sinks.One<Fluxer.Result> resultSink = Sinks.one();
 
 	putResultSink(Fluxer.State.Event.START_REQUESTED, resultSink);
+	System.out.println("(B)" + Thread.currentThread().getName());
 	sendEvent(Fluxer.State.Event.START_REQUESTED)
+		.subscribeOn(Schedulers.single())
 		.subscribe(results -> {
+		    System.out.println("(C)" + Thread.currentThread().getName());
 		    if (!isEventAccepted(results)) {
 			String log = "START_REQUESTED event wasn't accepted as it's currently "
 				+ getFluxerMachineState();
@@ -77,12 +82,14 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 			emitLog(Level.INFO, "Sent START_REQUESTED successfully");
 		    }
 		}, error -> {
+		    System.out.println("(D)" + Thread.currentThread().getName());
 		    resultSink.tryEmitValue(new Fluxer.Result(Fluxer.Result.Type.FAILED, error.getLocalizedMessage()));
 		    removeResultSink(Fluxer.State.Event.START_REQUESTED);
 		    emitLog(Level.ERROR, "Failed to send START_REQUESTED event:" + error.getLocalizedMessage(), error);
 		});
 
-	return resultSink.asMono();
+	System.out.println("(E)" + Thread.currentThread().getName());
+	return resultSink.asMono().publishOn(Schedulers.single());
     }
 
     @Override

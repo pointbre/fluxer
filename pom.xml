@@ -85,6 +85,14 @@
 				<scope>test</scope>
 			</dependency>
 
+<!--
+			<dependency>
+				<groupId>com.github.pointbre</groupId>
+				<artifactId>asyncer</artifactId>
+				<version>master-SNAPSHOT</version>
+			</dependency>
+-->
+
 			<dependency>
 				<groupId>org.projectlombok</groupId>
 				<artifactId>lombok</artifactId>
@@ -138,6 +146,10 @@
 			<name>Spring Milestones Repository</name>
 			<url>https://repo.spring.io/milestone</url>
 		</repository>
+		<repository>
+			<id>jitpack.io</id>
+			<url>https://jitpack.io</url>
+		</repository>
 	</repositories>
 
 	<build>
@@ -152,6 +164,9 @@
 						<target>21</target>
 						<debug>true</debug>
 						<optimize>true</optimize>
+						<compilerArgs>
+							<arg>--enable-preview</arg>
+						</compilerArgs>
 					</configuration>
 				</plugin>
 				<plugin>
@@ -172,7 +187,7 @@
 					<artifactId>maven-surefire-plugin</artifactId>
 					<version>3.0.0-M7</version>
 					<configuration>
-						<argLine>-Dfile.encoding=UTF-8</argLine>
+						<argLine>-Dfile.encoding=UTF-8 --enable-preview</argLine>
 					</configuration>
 				</plugin>
 				<plugin>
