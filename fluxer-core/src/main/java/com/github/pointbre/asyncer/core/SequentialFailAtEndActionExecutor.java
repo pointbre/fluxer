@@ -14,19 +14,21 @@ import java.util.concurrent.TimeoutException;
 import com.github.pointbre.asyncer.core.Asyncer.Action;
 import com.github.pointbre.asyncer.core.Asyncer.DynamicTransition;
 import com.github.pointbre.asyncer.core.Asyncer.Event;
-import com.github.pointbre.asyncer.core.Asyncer.Executor;
+import com.github.pointbre.asyncer.core.Asyncer.TaskExecutor;
 import com.github.pointbre.asyncer.core.Asyncer.State;
 import com.github.pointbre.asyncer.core.Asyncer.StaticTransition;
 import com.github.pointbre.asyncer.core.Asyncer.TaskResult;
 import com.github.pointbre.asyncer.core.Asyncer.Transition;
 import com.github.pointbre.asyncer.core.Asyncer.TransitionResult;
 
-public non-sealed class SequentialFailAtEndExecutor implements Executor {
+import lombok.NonNull;
+
+public non-sealed class SequentialFailAtEndActionExecutor implements TaskExecutor {
     private final List<TaskResult> taskResults = new ArrayList<>();
     private final List<ShutdownOnSuccess<TaskResult>> scopes = new ArrayList<>();
 
     @Override
-    public TransitionResult run(UUID uuid, Event event, Transition transition) {
+    public List<TaskResult> run(@NonNull List<Callable<TaskResult>> tasks, Duration timeout) {
 
 	State fromState = transition.getFrom();
 	State toState = fromState;

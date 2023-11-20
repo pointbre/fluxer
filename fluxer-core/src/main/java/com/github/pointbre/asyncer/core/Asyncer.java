@@ -2,10 +2,10 @@ package com.github.pointbre.asyncer.core;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.Callable;
-import java.util.concurrent.StructuredTaskScope.Subtask;
+
+import com.github.pointbre.asyncer.core.Asyncer.TaskResult;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -21,7 +21,7 @@ import reactor.util.annotation.Nullable;
 
 public interface Asyncer extends AutoCloseable {
 
-    Mono<TransitionResult> fire(UUID uuid, Event event);
+    Mono<TransitionResult> fire(@NonNull UUID uuid, @NonNull Event event);
 
     Flux<State> state();
 
@@ -57,6 +57,14 @@ public interface Asyncer extends AutoCloseable {
 	@NonNull
 	Event event;
 
+	@Nullable
+	List<Callable<TaskResult>> tasks;
+
+	@Nullable
+	Class<? extends TaskExecutor> taskExecutor;
+
+	@Nullable
+	Duration timeout;
     }
 
     @Value
@@ -64,16 +72,15 @@ public interface Asyncer extends AutoCloseable {
     public class StaticTransition extends Transition {
 
 	@Nullable
-	Action action;
-
-	@Nullable
 	State to;
 
-	public StaticTransition(@NonNull String name, @NonNull State from, @NonNull Event event, Action action,
-		State to) {
-	    super(name, from, event);
-	    this.action = action;
+	public StaticTransition(@NonNull String name, @NonNull State from, @NonNull Event event,
+		@Nullable List<Callable<TaskResult>> tasks, @Nullable Class<? extends TaskExecutor> taskExecutor,
+		@Nullable Duration timeout, @Nullable State to) {
+
+	    super(name, from, event, tasks, taskExecutor, timeout);
 	    this.to = to;
+
 	}
 
     }
@@ -81,8 +88,6 @@ public interface Asyncer extends AutoCloseable {
     @Value
     @EqualsAndHashCode(callSuper = true)
     public class DynamicTransition extends Transition {
-	@NonNull
-	Action action;
 
 	@NonNull
 	State toWhenProcessed;
@@ -91,30 +96,14 @@ public interface Asyncer extends AutoCloseable {
 	State toWhenFailed;
 
 	public DynamicTransition(@NonNull String name, @NonNull State from, @NonNull Event event,
-		@NonNull Action action,
-		@NonNull State toWhenProcessed, @NonNull State toWhenFailed) {
-	    super(name, from, event);
-	    this.action = action;
+		@NonNull List<Callable<TaskResult>> tasks, @NonNull Class<? extends TaskExecutor> taskExecutor,
+		@Nullable Duration timeout, @NonNull State toWhenProcessed, @NonNull State toWhenFailed) {
+
+	    super(name, from, event, tasks, taskExecutor, timeout);
 	    this.toWhenProcessed = toWhenProcessed;
 	    this.toWhenFailed = toWhenFailed;
+
 	}
-
-    }
-
-    @Value
-    public class Action {
-
-	@NonNull
-	String name;
-
-	@NonNull
-	List<Callable<TaskResult>> tasks;
-
-	@NonNull
-	Class<? extends Executor> executor;
-
-	@Nullable
-	Duration timeout;
 
     }
 
@@ -127,7 +116,7 @@ public interface Asyncer extends AutoCloseable {
 	@NonNull
 	Event event;
 
-	@Nullable
+	@NonNull
 	State fromState;
 
 	@Nullable
@@ -144,51 +133,50 @@ public interface Asyncer extends AutoCloseable {
 
 	@NonNull
 	String description;
+
     }
 
     @Value
     public class TaskResult {
 
 	@NonNull
+	UUID uuid;
+
+	@NonNull
 	Boolean result;
 
 	@NonNull
 	String description;
+
     }
 
-    // FIXME FailNever, FailFast, FailAtEnd
-    public sealed interface Executor extends AutoCloseable permits ParallelFailAtEndExecutor, SequentialFailAtEndExecutor {
-	public TransitionResult run(UUID uuid, Event event, Transition transition);
-	
-	static Executor of(Class<? extends Executor> executor) {
-	    if (executor.equals(ParallelFailAtEndExecutor.class)) {
-		return new ParallelFailAtEndExecutor();
-	    }
-	    else if (executor.equals(SequentialFailAtEndExecutor.class)) {
-		return new SequentialFailAtEndExecutor();
-	    }
-	    return new ParallelFailAtEndExecutor();
+    public interface TransitionExecutor extends AutoCloseable {
+
+	public TransitionResult run(@NonNull UUID uuid, @NonNull Event event, @NonNull Transition transition);
+
+	public static TransitionExecutor of(@NonNull Class<? extends TransitionExecutor> executor) {
+	    return new DefaultTransitionExecutorImpl();
 	}
+
     }
-//    public abstract sealed class Executor extends StructuredTaskScope<TaskResult> permits FailAtEndExecutor {
-//	public abstract TransitionResult run(UUID uuid, Event event, Transition transition);
-//	
-//	static Executor of(Class<? extends Executor> executor) {
-//	    if (executor.equals(FailAtEndExecutor.class)) {
-//		return new FailAtEndExecutor();
-//	    }
-//	    return new FailAtEndExecutor();
-//	}
-//
-//	static boolean isExecutedSuccessfully(Subtask<? extends TaskResult> executedTask) {
-//	    return executedTask.state().equals(Subtask.State.SUCCESS) && executedTask.get().getResult().booleanValue();
-//	}
-//
-//	static boolean isAllExecutedSuccessfully(List<Callable<TaskResult>> tasksToExecute,
-//		Queue<Subtask<? extends TaskResult>> executedTasks) {
-//	    return tasksToExecute.size() == executedTasks.size()
-//		    && executedTasks.stream().allMatch(task -> isExecutedSuccessfully(task));
-//	}
-//    }
+
+    // FIXME FailNever/FailFast/FailAtEnd, Sequential/Parallel
+    public sealed interface TaskExecutor extends AutoCloseable
+	    permits ParallelFailAtEndActionExecutor, SequentialFailAtEndActionExecutor {
+
+	public List<TaskResult> run(@NonNull List<Callable<TaskResult>> tasks, @Nullable Duration timeout);
+
+	public static TaskExecutor of(@NonNull Class<? extends TaskExecutor> taskExecutor) {
+
+	    if (taskExecutor.equals(ParallelFailAtEndActionExecutor.class)) {
+		return new ParallelFailAtEndActionExecutor();
+	    } else if (taskExecutor.equals(SequentialFailAtEndActionExecutor.class)) {
+		return new SequentialFailAtEndActionExecutor();
+	    }
+	    return new ParallelFailAtEndActionExecutor();
+
+	}
+
+    }
 
 }

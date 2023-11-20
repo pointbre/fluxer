@@ -4,28 +4,39 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import lombok.NonNull;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.core.publisher.Sinks.Many;
 import reactor.core.publisher.Sinks.One;
+import reactor.util.annotation.Nullable;
 import reactor.util.concurrent.Queues;
 import reactor.util.function.Tuple3;
 import reactor.util.function.Tuples;
 
-public class AsyncerImpl implements Asyncer {
+public class DefaultAsyncerImpl implements Asyncer {
 
+    @NonNull
     private final HashSet<State> states;
+
+    @NonNull
     private final State initialState;
+
+    @Nullable
     private final State finalState;
+
+    @NonNull
     private final HashSet<Event> events;
+
+    @NonNull
     private final HashSet<Transition> transitions;
 
-    private final ExecutorService executor = Executors.newSingleThreadExecutor(Thread.ofVirtual().factory());
+    @NonNull
+    private final TransitionExecutor transitionExecutor;
+
     private final BlockingQueue<Tuple3<UUID, Event, One<TransitionResult>>> requests = new LinkedBlockingQueue<>();
     private final Thread transitionHandler;
 
@@ -33,14 +44,17 @@ public class AsyncerImpl implements Asyncer {
 	    false);
     private State currentState;
 
-    public AsyncerImpl(HashSet<State> states, State initialState, State finalState, HashSet<Event> events,
-	    HashSet<Transition> transitions) {
+    public DefaultAsyncerImpl(@NonNull HashSet<State> states, @NonNull State initialState, @Nullable State finalState,
+	    @NonNull HashSet<Event> events, @NonNull HashSet<Transition> transitions,
+	    @NonNull TransitionExecutor transitionExecutor) {
 	this.states = states;
 	this.initialState = initialState;
 	this.finalState = finalState;
 	this.events = events;
 	this.transitions = transitions;
+	this.transitionExecutor = transitionExecutor;
 
+	// FIXME Better put this into a separate class? Or injected?
 	this.transitionHandler = Thread.ofVirtual().name("asyncer-transition-handler").start(() -> {
 
 	    while (true) {
@@ -53,8 +67,8 @@ public class AsyncerImpl implements Asyncer {
 		    break;
 		}
 
-		UUID uuid = request.getT1(); // FIXME what to do with this?
-		Event event = request.getT2();
+		final UUID uuid = request.getT1(); // FIXME what to do with this?
+		final Event event = request.getT2();
 		One<TransitionResult> resultSink = request.getT3();
 
 		// FIXME if event is changed to enum, I don't need to worry about this???
@@ -69,66 +83,38 @@ public class AsyncerImpl implements Asyncer {
 		    continue;
 		}
 
-		Optional<Transition> matchingTransition = transitions.stream()
-			.filter(t -> t.getFrom().equals(currentState) && t.getEvent().equals(event))
-			.findFirst();
+		final Optional<Transition> matchingTransition = transitions.stream()
+			.filter(t -> t.getFrom().equals(currentState) && t.getEvent().equals(event)).findFirst();
 		if (!matchingTransition.isPresent()) {
 		    resultSink.tryEmitValue(new TransitionResult(uuid, event, null, null, null, null, Boolean.FALSE,
 			    "No matching transition found from " + currentState + " triggered by " + event));
 		    continue;
 		}
-		
-		Transition transition = matchingTransition.get();
-		Action action = null;
-		TransitionResult transitionResult = null;
-		State updatedState = null;
-		if (transition instanceof StaticTransition t) {
-		    action = t.getAction();
-		    if (action != null) {
-			try (var executor = Executor.of(t.getAction().getExecutor())) {
-			    transitionResult = executor.run(uuid, event, transition);
-			} catch (Exception e) {
-			    // Exception might be thrown when automatic close() is called 
-			}
-		    }
-		    updatedState = t.getTo();
-		} else if (transition instanceof DynamicTransition t) {
-		    action = t.getAction();
-		    if (action == null) {
-			resultSink.tryEmitValue(new TransitionResult(uuid, event, null, null, null, null, Boolean.FALSE,
-				"Action of dynamic transition shouldn't be null: " + transition));
-			continue;
-		    }
-		    try (var executor = Executor.of(t.getAction().getExecutor())) {
-			transitionResult = executor.run(uuid,event, transition);
-			updatedState = transitionResult.getToState();
-		    } catch (Exception e) {
-			// Exception might be thrown when automatic close() is called
-		    }
+
+		final Transition transition = matchingTransition.get();
+		final TransitionResult transitionResult = transitionExecutor.run(uuid, event, transition);
+		if (transitionResult.getToState() != null && !currentState.equals(transitionResult.getToState())) {
+		    currentState = transitionResult.getToState();
+		    stateSink.tryEmitNext(currentState);
 		}
 
 		if (transitionResult.getTaskResults() != null) {
-		    transitionResult.getTaskResults().forEach(r -> System.out.println("executor result=" + r));
-		}
-
-		// Update current state only if it has changed
-		if (updatedState != null && !currentState.equals(updatedState)) {
-		    currentState = updatedState;
-		    stateSink.tryEmitNext(updatedState);
+		    transitionResult.getTaskResults().forEach(r -> System.out.println("task result=" + r));
 		}
 
 		resultSink.tryEmitValue(transitionResult);
 		System.out.println("Processing done: " + transitionResult);
+
 	    }
 	});
-	this.currentState = initialState;
 
+	this.currentState = initialState;
 	stateSink.tryEmitNext(initialState);
 
     }
 
     @Override
-    public Mono<TransitionResult> fire(UUID uuid, Event event) {
+    public Mono<TransitionResult> fire(@NonNull UUID uuid, @NonNull Event event) {
 
 	final One<TransitionResult> resultSink = Sinks.one();
 

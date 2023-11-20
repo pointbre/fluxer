@@ -65,7 +65,7 @@ public class AsyncerTest {
 	));
 //	var action1 = new Action("action1", tasks1, FailAtEndExecutor.class, Duration.ofSeconds(2));
 //	var action1 = new Action("action1", tasks1, ParallelFailAtEndExecutor.class, null);
-	var action1 = new Action("action1", tasks1, SequentialFailAtEndExecutor.class, null);
+	var action1 = new Action("action1", tasks1, SequentialFailAtEndActionExecutor.class, null);
 	var lockedToUnlocked = new DynamicTransition("", locked, coin, action1, unlocked, locked);
 	
 	var lockedToLocked = new StaticTransition("", locked, push, null, locked);
@@ -80,7 +80,7 @@ public class AsyncerTest {
 		    return new TaskResult(Boolean.TRUE, "");
 		}
 	));
-	var action2 = new Action("action2", tasks2, ParallelFailAtEndExecutor.class, null);
+	var action2 = new Action("action2", tasks2, ParallelFailAtEndActionExecutor.class, null);
 	var unlockedToLocked = new StaticTransition("", unlocked, push, action2, locked);
 
 	var unlockedToUnlocked = new StaticTransition("", unlocked, coin, null, unlocked);
@@ -91,7 +91,7 @@ public class AsyncerTest {
 	transitions.add(unlockedToUnlocked);
 
 	CountDownLatch latch = new CountDownLatch(1);
-	try (var asyncer = new AsyncerImpl(states, locked, null, events, transitions)) {
+	try (var asyncer = new DefaultAsyncerImpl(states, locked, null, events, transitions)) {
 	    
 	    System.out.println("1");
 	    

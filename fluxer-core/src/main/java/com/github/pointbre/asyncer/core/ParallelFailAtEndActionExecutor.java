@@ -2,68 +2,32 @@ package com.github.pointbre.asyncer.core;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
-import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.LinkedTransferQueue;
 import java.util.concurrent.StructuredTaskScope;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.StructuredTaskScope.Subtask;
 import java.util.stream.Collectors;
 
-import com.github.pointbre.asyncer.core.Asyncer.Action;
 import com.github.pointbre.asyncer.core.Asyncer.DynamicTransition;
-import com.github.pointbre.asyncer.core.Asyncer.Event;
-import com.github.pointbre.asyncer.core.Asyncer.Executor;
-import com.github.pointbre.asyncer.core.Asyncer.State;
-import com.github.pointbre.asyncer.core.Asyncer.StaticTransition;
+import com.github.pointbre.asyncer.core.Asyncer.TaskExecutor;
 import com.github.pointbre.asyncer.core.Asyncer.TaskResult;
-import com.github.pointbre.asyncer.core.Asyncer.Transition;
 import com.github.pointbre.asyncer.core.Asyncer.TransitionResult;
 
-public non-sealed class ParallelFailAtEndExecutor extends StructuredTaskScope<TaskResult> implements Executor {
+import lombok.NonNull;
 
-    private final Queue<Subtask<? extends TaskResult>> executedTasks = new LinkedTransferQueue<>();
+public non-sealed class ParallelFailAtEndActionExecutor extends StructuredTaskScope<TaskResult> implements TaskExecutor {
 
-    @Override
-    protected void handleComplete(Subtask<? extends TaskResult> task) {
-	executedTasks.add(task);
-    }
+    private final Queue<Subtask<? extends TaskResult>> executedSubtasks = new LinkedTransferQueue<>();
+    private final List<TaskResult> taskResults = new ArrayList<>();
 
     @Override
-    public TransitionResult run(UUID uuid, Event event, Transition transition) {
-	State fromState = transition.getFrom();
-	State toState = fromState;
-	if (transition instanceof StaticTransition t) {
-	    toState = t.getTo();
-	}
+    public List<TaskResult> run(@NonNull List<Callable<TaskResult>> tasks, Duration timeout) {
 
-	Action action = null;
-	if (transition instanceof StaticTransition t) {
-	    action = t.getAction();
-	    if (action == null) {
-		return new TransitionResult(uuid, event, fromState, toState, transition,
-			null, Boolean.TRUE, "No action to run: " + transition);
-	    } else if (action.getTasks() == null || action.getTasks().isEmpty()) {
-		return new TransitionResult(uuid, event, fromState, toState, transition, null,
-			Boolean.TRUE, "No tasks of action of static transition to run: " + action);
-	    }
-	} else if (transition instanceof DynamicTransition t) {
-	    action = t.getAction();
-	    if (action == null) {
-		return new TransitionResult(uuid, event, fromState, toState, transition, null,
-			Boolean.FALSE, "Action of dynamic transition shouldn't be null: " + transition);
-	    } else if (action.getTasks() == null || action.getTasks().isEmpty()) {
-		return new TransitionResult(uuid, event, fromState, toState, transition, null,
-			Boolean.FALSE,
-			"The tasks of action of dynamic transition shouldn't be null or empty: " + action);
-	    }
-	}
+	tasks.stream().forEach(task -> fork(task));
 
-	action.getTasks().stream().forEach(task -> fork(task));
-
-	Duration timeout = action.getTimeout();
 	if (timeout == null) {
 	    try {
 		join();
@@ -95,17 +59,22 @@ public non-sealed class ParallelFailAtEndExecutor extends StructuredTaskScope<Ta
 	}
 
 	if (transition instanceof DynamicTransition t) {
-	    if (isAllExecutedSuccessfully(action.getTasks(), executedTasks)) {
+	    if (isAllExecutedSuccessfully(action.getTasks(), executedSubtasks)) {
 		toState = t.getToWhenProcessed();
 	    } else {
 		toState = t.getToWhenFailed();
 	    }
 	}
 
-	List<TaskResult> taskResults = executedTasks.stream().map(task -> task.get()).collect(Collectors.toList());
+	List<TaskResult> taskResults = executedSubtasks.stream().map(task -> task.get()).collect(Collectors.toList());
 
 	return new TransitionResult(uuid, event, fromState, toState, transition, taskResults,
 		Boolean.TRUE, "Successfully execute transition");
+    }
+    
+    @Override
+    protected void handleComplete(Subtask<? extends TaskResult> task) {
+	executedSubtasks.add(task);
     }
 
     private boolean isExecutedSuccessfully(Subtask<? extends TaskResult> executedTask) {
