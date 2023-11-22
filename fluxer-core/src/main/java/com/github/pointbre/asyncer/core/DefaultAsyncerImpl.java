@@ -1,10 +1,12 @@
 package com.github.pointbre.asyncer.core;
 
+import java.time.Duration;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import lombok.NonNull;
 import reactor.core.publisher.Flux;
@@ -15,6 +17,7 @@ import reactor.core.publisher.Sinks.One;
 import reactor.util.annotation.Nullable;
 import reactor.util.concurrent.Queues;
 import reactor.util.function.Tuple3;
+import reactor.util.function.Tuple4;
 import reactor.util.function.Tuples;
 
 public class DefaultAsyncerImpl implements Asyncer {
@@ -37,8 +40,13 @@ public class DefaultAsyncerImpl implements Asyncer {
     @NonNull
     private final TransitionExecutor transitionExecutor;
 
-    private final BlockingQueue<Tuple3<UUID, Event, One<TransitionResult>>> requests = new LinkedBlockingQueue<>();
+    private record Request(UUID uuid, Event event, One<TransitionResult> resultSink) {
+    }
+
+    private final BlockingQueue<Request> requests = new LinkedBlockingQueue<>();
     private final Thread transitionHandler;
+    private final static Request POISON_PILL = new Request(null, null, null);
+    private final AtomicBoolean isBeingClosed = new AtomicBoolean(false);
 
     private final Many<State> stateSink = Sinks.many().multicast().<State>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE,
 	    false);
@@ -58,7 +66,7 @@ public class DefaultAsyncerImpl implements Asyncer {
 	this.transitionHandler = Thread.ofVirtual().name("asyncer-transition-handler").start(() -> {
 
 	    while (true) {
-		Tuple3<UUID, Event, One<TransitionResult>> request = null;
+		Request request = null;
 
 		try {
 		    request = requests.take();
@@ -67,9 +75,16 @@ public class DefaultAsyncerImpl implements Asyncer {
 		    break;
 		}
 
-		final UUID uuid = request.getT1(); // FIXME what to do with this?
-		final Event event = request.getT2();
-		One<TransitionResult> resultSink = request.getT3();
+		System.out.println("Request received " + request);
+
+		if (request.equals(POISON_PILL)) {
+		    System.out.println("Poison pill arrived");
+		    break;
+		}
+
+		final UUID uuid = request.uuid();
+		final Event event = request.event();
+		One<TransitionResult> resultSink = request.resultSink();
 
 		// FIXME if event is changed to enum, I don't need to worry about this???
 		if (!events.contains(event)) {
@@ -91,20 +106,39 @@ public class DefaultAsyncerImpl implements Asyncer {
 		    continue;
 		}
 
-		final Transition transition = matchingTransition.get();
-		final TransitionResult transitionResult = transitionExecutor.run(uuid, event, transition);
-		if (transitionResult.getToState() != null && !currentState.equals(transitionResult.getToState())) {
-		    currentState = transitionResult.getToState();
-		    stateSink.tryEmitNext(currentState);
+		// If being closed now, just return the result now
+		if (isBeingClosed.get()) {
+		    resultSink.tryEmitValue(new TransitionResult(uuid, event, null, null, null, null, Boolean.FALSE,
+			    "Being closed now, so not possible to process the event: " + event));
+		} else {
+		    System.out.println("Running");
+		    final Transition transition = matchingTransition.get();
+		    final TransitionResult transitionResult = transitionExecutor.run(uuid, event, transition);
+		    System.out.println("Returned transition result=" + transitionResult);
+		    if (transitionResult.getToState() != null && !currentState.equals(transitionResult.getToState())) {
+			currentState = transitionResult.getToState();
+			try {
+			    stateSink.tryEmitNext(currentState);
+			} catch (Exception e) {
+			    // TODO Auto-generated catch block
+			    e.printStackTrace();
+			}
+		    } else {
+			System.out.println("state hasn't changed");
+		    }
+
+		    if (transitionResult.getTaskResults() != null) {
+			transitionResult.getTaskResults().forEach(r -> System.out.println("task result=" + r));
+		    }
+
+		    try {
+			resultSink.tryEmitValue(transitionResult);
+		    } catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		    }
+		    System.out.println("Processing done: " + transitionResult);
 		}
-
-		if (transitionResult.getTaskResults() != null) {
-		    transitionResult.getTaskResults().forEach(r -> System.out.println("task result=" + r));
-		}
-
-		resultSink.tryEmitValue(transitionResult);
-		System.out.println("Processing done: " + transitionResult);
-
 	    }
 	});
 
@@ -119,7 +153,7 @@ public class DefaultAsyncerImpl implements Asyncer {
 	final One<TransitionResult> resultSink = Sinks.one();
 
 	try {
-	    requests.put(Tuples.of(uuid, event, resultSink));
+	    requests.put(new Request(uuid, event, resultSink));
 	} catch (InterruptedException e) {
 	    resultSink.tryEmitValue(new TransitionResult(uuid, event, null, null, null, null, Boolean.FALSE,
 		    "Failed to fire the event: " + event));
@@ -140,7 +174,20 @@ public class DefaultAsyncerImpl implements Asyncer {
     public void close() throws Exception {
 
 	System.out.println("Asyncer's close() called");
-	transitionHandler.interrupt();
-
+	// Add
+//	transitionHandler.interrupt();
+	try {
+	    System.out.println("Putting poison pill");
+	    requests.put(POISON_PILL);
+	    isBeingClosed.set(true);
+	    System.out.println("Waiting until the poison pill is taken");
+	    System.out.println("");
+	    while (!requests.isEmpty()) {
+		System.out.print(".");
+		Thread.sleep(Duration.ofMillis(100));
+	    }
+	    System.out.println("Poison pill is taken");
+	} catch (InterruptedException e) {
+	}
     }
 }

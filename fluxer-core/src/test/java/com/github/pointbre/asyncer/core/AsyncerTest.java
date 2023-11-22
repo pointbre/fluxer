@@ -13,12 +13,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.github.pointbre.asyncer.core.Asyncer.Action;
 import com.github.pointbre.asyncer.core.Asyncer.DynamicTransition;
 import com.github.pointbre.asyncer.core.Asyncer.Event;
 import com.github.pointbre.asyncer.core.Asyncer.State;
 import com.github.pointbre.asyncer.core.Asyncer.StaticTransition;
 import com.github.pointbre.asyncer.core.Asyncer.TaskResult;
+import com.github.pointbre.asyncer.core.Asyncer.TransitionExecutor;
 
 @ExtendWith(MockitoExtension.class)
 public class AsyncerTest {
@@ -43,47 +43,46 @@ public class AsyncerTest {
 		    System.out.println(">>>1 task #1 of action");
 		    System.out.println(">>>1 Taking 6 seconds sleep");
 //		    try {
-			Thread.sleep(Duration.ofSeconds(6));
+		    Thread.sleep(Duration.ofSeconds(6));
 //		    } catch (InterruptedException e) {	
 //			System.out.println(">>>1 task #1 interrupted");
 //		    }
 		    System.out.println(">>>1 Will return result now");
-		    return new TaskResult(Boolean.TRUE, "");
+		    return new TaskResult(AsyncerUtil.generateType1UUID(), Boolean.TRUE, "done 1");
 		},
-		
+
 		() -> {
 		    System.out.println(">>>2 task #2 of action");
 		    System.out.println(">>>2 Taking 3 seconds sleep");
 //		    try {
-			Thread.sleep(Duration.ofSeconds(3));
+		    Thread.sleep(Duration.ofSeconds(3));
 //		    } catch (InterruptedException e) {		
 //			e.printStackTrace();
 //		    }
 		    System.out.println(">>>2 Will return result now");
-		    return new TaskResult(Boolean.TRUE, "");
-		}
-	));
-//	var action1 = new Action("action1", tasks1, FailAtEndExecutor.class, Duration.ofSeconds(2));
-//	var action1 = new Action("action1", tasks1, ParallelFailAtEndExecutor.class, null);
-	var action1 = new Action("action1", tasks1, SequentialFailAtEndActionExecutor.class, null);
-	var lockedToUnlocked = new DynamicTransition("", locked, coin, action1, unlocked, locked);
-	
-	var lockedToLocked = new StaticTransition("", locked, push, null, locked);
+		    return new TaskResult(AsyncerUtil.generateType1UUID(), Boolean.TRUE, "done 2");
+		}));
 
-	//	var unlockedToLocked = new Asyncer.StaticTransition(unlocked, push, null, locked);
+	var lockedToUnlocked = new DynamicTransition("", locked, coin, tasks1, ParallelFAETaskExecutor.class,
+		null, unlocked, locked);
+
+	var lockedToLocked = new StaticTransition("", locked, push, null, null, null, locked);
+
+	// var unlockedToLocked = new Asyncer.StaticTransition(unlocked, push, null,
+	// locked);
 	List<Callable<TaskResult>> tasks2 = new ArrayList<>(Arrays.asList(
 		() -> {
 		    System.out.println(">>>3 task #1 of action");
 		    System.out.println(">>>3 Taking 3 seconds sleep");
 		    Thread.sleep(Duration.ofSeconds(3));
 		    System.out.println(">>>3 Will return result now");
-		    return new TaskResult(Boolean.TRUE, "");
-		}
-	));
-	var action2 = new Action("action2", tasks2, ParallelFailAtEndActionExecutor.class, null);
-	var unlockedToLocked = new StaticTransition("", unlocked, push, action2, locked);
+		    return new TaskResult(AsyncerUtil.generateType1UUID(), Boolean.TRUE, "done 3");
+		}));
+	var unlockedToLocked = new StaticTransition("", unlocked, push, tasks2, ParallelFAETaskExecutor.class,
+		null, locked);
 
-	var unlockedToUnlocked = new StaticTransition("", unlocked, coin, null, unlocked);
+	var unlockedToUnlocked = new StaticTransition("", unlocked, coin, null, null, null, unlocked);
+
 	var transitions = new HashSet<Asyncer.Transition>();
 	transitions.add(lockedToUnlocked);
 	transitions.add(lockedToLocked);
@@ -91,21 +90,21 @@ public class AsyncerTest {
 	transitions.add(unlockedToUnlocked);
 
 	CountDownLatch latch = new CountDownLatch(1);
-	try (var asyncer = new DefaultAsyncerImpl(states, locked, null, events, transitions)) {
-	    
+	TransitionExecutor transitionExecutor = new DefaultTransitionExecutorImpl();
+	long time1 = System.currentTimeMillis();
+	try (var asyncer = new DefaultAsyncerImpl(states, locked, null, events, transitions, transitionExecutor)) {
+
 	    System.out.println("1");
-	    
+
 	    asyncer.state().subscribe(s -> {
 		System.out.println("state updated=" + s);
-//		latch.countDown();
 	    }, e -> {
 		System.out.println("state error=" + e);
-//		latch.countDown();
 	    });
 
 	    System.out.println("2");
 
-	    long time1 = System.currentTimeMillis();
+	    
 	    asyncer.fire(AsyncerUtil.generateType1UUID(), coin).subscribe(r -> {
 		System.out.println("fire coin finished=" + r);
 		latch.countDown();
@@ -113,24 +112,21 @@ public class AsyncerTest {
 		System.out.println("fire coin error=" + e);
 		latch.countDown();
 	    });
-	    
+
 	    System.out.println("3");
-	    
-//	    IntStream.range(1, 10).forEach(n -> {
-//		    asyncer.fire(AsyncerUtil.generateType1UUID(), push).subscribe(r -> {
-////			System.out.println("fire push " + n + " finished=" + r);
-////			latch.countDown();
-//		    }, e -> {
-////			System.out.println("fire push " + n + " error=" + e);
-////			latch.countDown();
-//		    });
+
+//	    asyncer.fire(AsyncerUtil.generateType1UUID(), push).subscribe(r -> {
+//		System.out.println("fire push 1 finished=" + r);
+//		latch.countDown();
+//	    }, e -> {
+//		System.out.println("fire push 1 error=" + e);
+//		latch.countDown();
 //	    });
-//	    
-//	    System.out.println("4");	    
 //
-	    
+//	    System.out.println("4");
+
 	    try {
-		latch.await(10, TimeUnit.SECONDS);
+		latch.await(5, TimeUnit.SECONDS);
 		long time2 = System.currentTimeMillis();
 		System.out.println("5 --> " + (time2 - time1));
 //		latch.await();
@@ -139,10 +135,12 @@ public class AsyncerTest {
 	    } finally {
 
 	    }
-	    
+
 	    System.out.println("6");
 	}
-	
-	System.out.println("7");
+
+//	Thread.sleep(5);
+	long time3 = System.currentTimeMillis();
+	System.out.println("7 --> " + (time3 - time1));
     }
 }

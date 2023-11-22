@@ -116,7 +116,7 @@ public interface Asyncer extends AutoCloseable {
 	@NonNull
 	Event event;
 
-	@NonNull
+	@Nullable
 	State fromState;
 
 	@Nullable
@@ -160,20 +160,19 @@ public interface Asyncer extends AutoCloseable {
 
     }
 
-    // FIXME FailNever/FailFast/FailAtEnd, Sequential/Parallel
     public sealed interface TaskExecutor extends AutoCloseable
-	    permits ParallelFailAtEndActionExecutor, SequentialFailAtEndActionExecutor {
+	    permits ParallelFAETaskExecutor, SequentialFAETaskExecutor {
 
 	public List<TaskResult> run(@NonNull List<Callable<TaskResult>> tasks, @Nullable Duration timeout);
 
 	public static TaskExecutor of(@NonNull Class<? extends TaskExecutor> taskExecutor) {
 
-	    if (taskExecutor.equals(ParallelFailAtEndActionExecutor.class)) {
-		return new ParallelFailAtEndActionExecutor();
-	    } else if (taskExecutor.equals(SequentialFailAtEndActionExecutor.class)) {
-		return new SequentialFailAtEndActionExecutor();
+	    if (taskExecutor.equals(ParallelFAETaskExecutor.class)) {
+		return new ParallelFAETaskExecutor();
+	    } else if (taskExecutor.equals(SequentialFAETaskExecutor.class)) {
+		return new SequentialFAETaskExecutor();
 	    }
-	    return new ParallelFailAtEndActionExecutor();
+	    return new ParallelFAETaskExecutor();
 
 	}
 
