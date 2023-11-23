@@ -5,57 +5,33 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 
-import com.github.pointbre.asyncer.core.Asyncer.TaskResult;
-
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
 import lombok.NonNull;
-import lombok.ToString;
 import lombok.Value;
-import lombok.experimental.FieldDefaults;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks.Many;
 import reactor.util.annotation.Nullable;
 
-public interface Asyncer extends AutoCloseable {
+public interface Asyncer<S, E> extends AutoCloseable {
 
-    Mono<TransitionResult> fire(@NonNull UUID uuid, @NonNull Event event);
+    Mono<TransitionResult<S, E>> fire(@NonNull UUID uuid, @NonNull E event);
 
-    Flux<State> state();
-
-    @Value
-    public class State {
-
-	@NonNull
-	String name;
-
-    }
+    Flux<S> state();
 
     @Value
-    public class Event {
-
-	@NonNull
-	String name;
-
-    }
-
-    @ToString
-    @EqualsAndHashCode
-    @AllArgsConstructor
-    @FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)
-    @Getter
-    public sealed class Transition permits StaticTransition, DynamicTransition {
+    public class Transition<S, E> {
 
 	@NonNull
 	String name;
 
 	@NonNull
-	State from;
+	S from;
 
 	@NonNull
-	Event event;
+	E event;
+	
+	@Nullable
+	S to;
 
 	@Nullable
 	List<Callable<TaskResult>> tasks;
@@ -65,65 +41,28 @@ public interface Asyncer extends AutoCloseable {
 
 	@Nullable
 	Duration timeout;
-    }
-
-    @Value
-    @EqualsAndHashCode(callSuper = true)
-    public class StaticTransition extends Transition {
+	
+	@Nullable
+	S toWhenProcessed;
 
 	@Nullable
-	State to;
-
-	public StaticTransition(@NonNull String name, @NonNull State from, @NonNull Event event,
-		@Nullable List<Callable<TaskResult>> tasks, @Nullable Class<? extends TaskExecutor> taskExecutor,
-		@Nullable Duration timeout, @Nullable State to) {
-
-	    super(name, from, event, tasks, taskExecutor, timeout);
-	    this.to = to;
-
-	}
-
+	S toWhenFailed;
     }
 
     @Value
-    @EqualsAndHashCode(callSuper = true)
-    public class DynamicTransition extends Transition {
-
-	@NonNull
-	State toWhenProcessed;
-
-	@NonNull
-	State toWhenFailed;
-
-	public DynamicTransition(@NonNull String name, @NonNull State from, @NonNull Event event,
-		@NonNull List<Callable<TaskResult>> tasks, @NonNull Class<? extends TaskExecutor> taskExecutor,
-		@Nullable Duration timeout, @NonNull State toWhenProcessed, @NonNull State toWhenFailed) {
-
-	    super(name, from, event, tasks, taskExecutor, timeout);
-	    this.toWhenProcessed = toWhenProcessed;
-	    this.toWhenFailed = toWhenFailed;
-
-	}
-
-    }
-
-    @Value
-    public class TransitionResult {
+    public class TransitionResult<S, E> {
 
 	@NonNull
 	UUID uuid;
 
 	@NonNull
-	Event event;
+	E event;
+
+	@NonNull
+	List<S> states;
 
 	@Nullable
-	State fromState;
-
-	@Nullable
-	State toState;
-
-	@Nullable
-	Transition transition;
+	Transition<S, E> transition;
 
 	@Nullable
 	List<TaskResult> taskResults;
@@ -150,12 +89,12 @@ public interface Asyncer extends AutoCloseable {
 
     }
 
-    public interface TransitionExecutor extends AutoCloseable {
+    public sealed interface TransitionExecutor<S, E> extends AutoCloseable permits DefaultTransitionExecutorImpl {
 
-	public TransitionResult run(@NonNull UUID uuid, @NonNull Event event, @NonNull Transition transition);
+	public TransitionResult<S, E> run(@NonNull UUID uuid, @NonNull S state, @NonNull E event, @NonNull Transition<S, E> transition, @NonNull Many<S> stateSink);
 
-	public static TransitionExecutor of(@NonNull Class<? extends TransitionExecutor> executor) {
-	    return new DefaultTransitionExecutorImpl();
+	public static <S, E> TransitionExecutor<S, E> of(@NonNull Class<? extends TransitionExecutor<S, E>> executor) {
+	    return new DefaultTransitionExecutorImpl<>();
 	}
 
     }

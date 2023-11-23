@@ -1,12 +1,9 @@
 package com.github.pointbre.asyncer.core;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import com.github.pointbre.asyncer.core.Asyncer.DynamicTransition;
-import com.github.pointbre.asyncer.core.Asyncer.Event;
-import com.github.pointbre.asyncer.core.Asyncer.State;
-import com.github.pointbre.asyncer.core.Asyncer.StaticTransition;
 import com.github.pointbre.asyncer.core.Asyncer.TaskExecutor;
 import com.github.pointbre.asyncer.core.Asyncer.TaskResult;
 import com.github.pointbre.asyncer.core.Asyncer.Transition;
@@ -14,60 +11,67 @@ import com.github.pointbre.asyncer.core.Asyncer.TransitionExecutor;
 import com.github.pointbre.asyncer.core.Asyncer.TransitionResult;
 
 import lombok.NonNull;
+import reactor.core.publisher.Sinks.Many;
 
-public class DefaultTransitionExecutorImpl implements TransitionExecutor {
+public non-sealed class DefaultTransitionExecutorImpl<S, E> implements TransitionExecutor<S, E> {
 
     private TaskExecutor taskExecutor = null;
-    
+
     @Override
-    public TransitionResult run(@NonNull UUID uuid, @NonNull Event event, @NonNull Transition transition) {
+    public TransitionResult<S, E> run(@NonNull UUID uuid, @NonNull S state, @NonNull E event,
+	    @NonNull Transition<S, E> transition, @NonNull Many<S> stateSink) {
 
-	State fromState = transition.getFrom();
-	State toState = fromState;
-	if (transition instanceof StaticTransition t) {
-	    toState = t.getTo();
-	}
+	boolean isToStateSpecified = transition.getTo() != null;
+	boolean shouldRunTasks = transition.getTasks() != null && !transition.getTasks().isEmpty()
+		&& transition.getTaskExecutor() != null;
+	boolean shouldDetermineStateFromTaskResults = shouldRunTasks && transition.getToWhenProcessed() != null
+		&& transition.getToWhenFailed() != null;
 
-	// FIXME Probably better to put this block as a common validation util that can be used in DefaultAsyncerImpl's constructor
-	if (transition instanceof StaticTransition t) {
-	    if (t.getTasks() == null || t.getTasks().isEmpty()) {
-		return new TransitionResult(uuid, event, fromState, toState, t, null, Boolean.TRUE,
-			"No action to run is specified for static transition: " + t);
-	    } else if (t.getTaskExecutor() == null) {
-		return new TransitionResult(uuid, event, fromState, toState, t, null, Boolean.TRUE,
-			"No task executor is provided for static transition: " + t);
-	    }
-	} else if (transition instanceof DynamicTransition t) {
-	    if (t.getTasks() == null || t.getTasks().isEmpty()) {
-		return new TransitionResult(uuid, event, fromState, toState, t, null, Boolean.FALSE,
-			"No action to run is specified for dynamic transition: " + t);
-	    } else if (t.getTaskExecutor() == null) {
-		return new TransitionResult(uuid, event, fromState, toState, t, null, Boolean.FALSE,
-			"No task executor is provided for dynamic transition: " + t);
+	List<S> states = new ArrayList<>();
+	List<TaskResult> taskResults = null;
+
+	if (isToStateSpecified) {
+	    S firstState = transition.getTo();
+	    states.add(firstState);
+
+	    try {
+		stateSink.tryEmitNext(firstState);
+	    } catch (Exception e) {
+		// TODO Auto-generated catch block
+		e.printStackTrace();
 	    }
 	}
 
-	taskExecutor = TaskExecutor.of(transition.getTaskExecutor());
-	List<TaskResult> taskResults = taskExecutor.run(transition.getTasks(), transition.getTimeout());
-	if (transition instanceof DynamicTransition t) {
-	    if (transition.getTasks().size() == taskResults.size()
-		    && taskResults.stream().allMatch(r -> r.getResult().booleanValue())) {
-		toState = t.getToWhenProcessed();
-	    } else {
-		toState = t.getToWhenFailed();
+	if (shouldRunTasks) {
+	    taskResults = TaskExecutor.of(transition.getTaskExecutor()).run(transition.getTasks(),
+		    transition.getTimeout());
+	    if (shouldDetermineStateFromTaskResults) {
+		S secondState = transition.getToWhenFailed();
+		if (transition.getTasks().size() == taskResults.size()
+			&& taskResults.stream().allMatch(r -> r.getResult().booleanValue())) {
+		    secondState = transition.getToWhenProcessed();
+		}
+		states.add(secondState);
+
+		try {
+		    stateSink.tryEmitNext(secondState);
+		} catch (Exception e) {
+		    // TODO Auto-generated catch block
+		    e.printStackTrace();
+		}
 	    }
 	}
 
-	return new TransitionResult(uuid, event, fromState, toState, transition, taskResults, Boolean.TRUE,
+	return new TransitionResult<>(uuid, event, states, transition, taskResults, Boolean.TRUE,
 		"Successfully executed the transition");
     }
 
     @Override
     public void close() throws Exception {
-	
+
 	if (taskExecutor != null) {
 	    taskExecutor.close();
 	}
-	
+
     }
 }
