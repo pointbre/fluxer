@@ -4,6 +4,6 @@ import reactor.core.publisher.Mono;
 
 public interface ServerFluxer<T> extends TcpFluxer<T> {
 
-    Mono<Result> disconnect(EndPoint remote);
+    Mono<RequestResult> disconnect(EndPoint remote);
 
 }

@@ -1,187 +1,233 @@
 package com.github.pointbre.fluxer.core;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 import org.slf4j.event.Level;
 
-import com.github.pointbre.fluxer.util.FluxerUtil;
+import com.github.pointbre.asyncer.core.AsyncerUtil;
 
 import lombok.NonNull;
 import lombok.Value;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.annotation.Nullable;
 
 public interface Fluxer<T> extends AutoCloseable {
-    /**
-     * Starts up Fluxer
-     * 
-     * @return {@link Mono} of {@link Result}
-     */
-    Mono<Result> start();
 
-    /**
-     * Stops Fluxer
-     * 
-     * @return {@link Mono} of {@link Result}
-     */
-    Mono<Result> stop();
+	/**
+	 * Fluxer's UUID
+	 * 
+	 * @return
+	 */
+	UUID uuid();
 
-    /**
-     * Send the byte array to the remote {@link EndPoint}
-     * 
-     * @param message
-     * @param remote
-     * @return
-     */
-    Mono<Result> send(T message, EndPoint remote);
+	/**
+	 * Starts up Fluxer
+	 * 
+	 * @return {@link Mono} of {@link RequestResult}
+	 */
+	Mono<RequestResult> start();
 
-    /**
-     * Provides the stream of {@link State} changes
-     * 
-     * @return {@link Flux} of {@link State}
-     */
-    Flux<State> state();
+	/**
+	 * Stops Fluxer
+	 * 
+	 * @return {@link Mono} of {@link RequestResult}
+	 */
+	Mono<RequestResult> stop();
 
-    /**
-     * Provides the stream of {@link Link} changes
-     * 
-     * @return {@link Flux} of {@link Link}
-     */
-    Flux<Link> link();
+	/**
+	 * Send the byte array to the remote {@link EndPoint}
+	 * 
+	 * @param message
+	 * @param remote
+	 * @return
+	 */
+	Mono<RequestResult> send(T message, EndPoint remote);
 
-    /**
-     * Provides the stream of inbound and outbound {@link Message} changes
-     * 
-     * @return {@link Flux} of {@link Message}
-     */
-    Flux<Message<T>> message();
+	/**
+	 * Provides the stream of {@link State} changes
+	 * 
+	 * @return {@link Flux} of {@link State}
+	 */
+	Flux<State> state();
 
-    /**
-     * Provides the stream of Fluxer's {@link Log} changes
-     * 
-     * @return {@link Flux} of {@link Log}
-     */
-    Flux<Log> log();
+	/**
+	 * Provides the stream of {@link Link} changes
+	 * 
+	 * @return {@link Flux} of {@link Link}
+	 */
+	Flux<Link> link();
 
-    @Value
-    public class Result {
-	public enum Type {
-	    PROCESSED, FAILED
+	/**
+	 * Provides the stream of inbound and outbound {@link Message} changes
+	 * 
+	 * @return {@link Flux} of {@link Message}
+	 */
+	Flux<Message<T>> message();
+
+	/**
+	 * Provides the stream of Fluxer's {@link Log} changes
+	 * 
+	 * @return {@link Flux} of {@link Log}
+	 */
+	Flux<Log> log();
+
+	@Value
+	public class RequestResult {
+
+		@NonNull
+		UUID uuid;
+
+		@NonNull
+		State.Event event;
+
+		@NonNull
+		Boolean result;
+
+		@NonNull
+		String description;
 	}
 
-	@NonNull String uuid;
-	@NonNull Type type;
-	@NonNull String description;
+	@Value
+	public class State {
+		public enum Type {
+			STARTING, STARTED, STOPPING, STOPPED
+		}
 
-	public Result(Type type, String description) {
-	    this.uuid = FluxerUtil.generateType1UUID().toString();
-	    this.type = type;
-	    this.description = description;
-	}
-    }
+		public enum Event {
+			START, STOP;
+		}
 
-    @Value
-    public class State {
-	public enum Type {
-	    STARTING, STARTED, STOPPING, STOPPED
-	}
+		@NonNull
+		UUID uuid;
 
-	public enum Event {
-	    START_REQUESTED, STOP_REQUESTED, PROCESSED, FAILED;
-	}
+		@NonNull
+		String id;
 
-	@NonNull String uuid;
-	@NonNull String id;
-	@NonNull Type type;
-	Event event;
+		@NonNull
+		Type type;
 
-	public State(String id, Type type, Event event) {
-	    this.uuid = FluxerUtil.generateType1UUID().toString();
-	    this.id = id;
-	    this.type = type;
-	    this.event = event;
-	}
+		@Nullable
+		Event event;
 
-	public State(String id, Type type) {
-	    this(id, type, null);
-	}
-    }
+		public State(String id, Type type, Event event) {
+			this.uuid = AsyncerUtil.generateType1UUID();
+			this.id = id;
+			this.type = type;
+			this.event = event;
+		}
 
-    @Value
-    public class Link {
-	public enum State {
-	    CONNECTED, DISCONNECTED, NONE;
+		public State(String id, Type type) {
+			this(id, type, null);
+		}
 	}
 
-	@NonNull String uuid;
-	@NonNull String id;
-	@NonNull State state;
-	@NonNull EndPoint local;
-	@NonNull EndPoint remote;
+	@Value
+	public class Link {
+		public enum State {
+			CONNECTED, DISCONNECTED, NONE;
+		}
 
-	public Link(String id, State state, EndPoint local, EndPoint remote) {
-	    this.uuid = FluxerUtil.generateType1UUID().toString();
-	    this.id = id;
-	    this.state = state;
-	    this.local = local;
-	    this.remote = remote;
-	}
-    }
+		@NonNull
+		UUID uuid;
 
-    @Value
-    public class EndPoint {
-	@NonNull String ipAddress;
-	@NonNull Integer port;
+		@NonNull
+		String id;
 
-	public EndPoint(String ipAddress, Integer port) {
-	    this.ipAddress = ipAddress;
-	    this.port = port;
-	}
-    }
+		@NonNull
+		State state;
 
-    @Value
-    public class Message<T> {
-	public enum Type {
-	    INBOUND, OUTBOUND;
+		@NonNull
+		EndPoint local;
+
+		@NonNull
+		EndPoint remote;
+
+		public Link(String id, State state, EndPoint local, EndPoint remote) {
+			this.uuid = AsyncerUtil.generateType1UUID();
+			this.id = id;
+			this.state = state;
+			this.local = local;
+			this.remote = remote;
+		}
 	}
 
-	@NonNull String uuid;
-	@NonNull Type type;
-	@NonNull EndPoint local;
-	@NonNull EndPoint remote;
-	@NonNull T message;
+	@Value
+	public class EndPoint {
+		@NonNull
+		String ipAddress;
 
-	public static <T> Message<T> of(Type type, EndPoint local, EndPoint remote, T message) {
-	    return new Message<>(type, local, remote, message);
+		@NonNull
+		Integer port;
+
+		public EndPoint(String ipAddress, Integer port) {
+			this.ipAddress = ipAddress;
+			this.port = port;
+		}
 	}
 
-	private Message(Type type, EndPoint local, EndPoint remote, T message) {
-	    this.uuid = FluxerUtil.generateType1UUID().toString();
-	    this.type = type;
-	    this.local = local;
-	    this.remote = remote;
-	    this.message = message;
-	}
-    }
+	@Value
+	public class Message<T> {
+		public enum Type {
+			INBOUND, OUTBOUND;
+		}
 
-    @Value
-    public class Log {
-	@NonNull String uuid;
-	@NonNull LocalDateTime dateTime;
-	@NonNull Level level;
-	@NonNull String description;
-	Throwable throwable;
+		@NonNull
+		UUID uuid;
 
-	public Log(Level level, String log, Throwable throwable) {
-	    this.uuid = FluxerUtil.generateType1UUID().toString();
-	    this.dateTime = LocalDateTime.now();
-	    this.level = level;
-	    this.description = log;
-	    this.throwable = throwable;
+		@NonNull
+		Type type;
+
+		@NonNull
+		EndPoint local;
+
+		@NonNull
+		EndPoint remote;
+
+		@NonNull
+		T message;
+
+		public static <T> Message<T> of(Type type, EndPoint local, EndPoint remote, T message) {
+			return new Message<>(type, local, remote, message);
+		}
+
+		private Message(Type type, EndPoint local, EndPoint remote, T message) {
+			this.uuid = AsyncerUtil.generateType1UUID();
+			this.type = type;
+			this.local = local;
+			this.remote = remote;
+			this.message = message;
+		}
 	}
-	
-	public Log(Level level, String log) {
-	    this(level, log, null);
+
+	@Value
+	public class Log {
+		@NonNull
+		UUID uuid;
+
+		@NonNull
+		LocalDateTime dateTime;
+
+		@NonNull
+		Level level;
+
+		@NonNull
+		String description;
+
+		@Nullable
+		Throwable throwable;
+
+		public Log(Level level, String log, Throwable throwable) {
+			this.uuid = AsyncerUtil.generateType1UUID();
+			this.dateTime = LocalDateTime.now();
+			this.level = level;
+			this.description = log;
+			this.throwable = throwable;
+		}
+
+		public Log(Level level, String log) {
+			this(level, log, null);
+		}
 	}
-    }
 }

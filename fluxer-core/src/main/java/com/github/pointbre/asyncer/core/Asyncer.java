@@ -12,109 +12,142 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks.Many;
 import reactor.util.annotation.Nullable;
 
-public interface Asyncer<S, E> extends AutoCloseable {
+public interface Asyncer<S, E, R> extends AutoCloseable {
 
-    Mono<TransitionResult<S, E>> fire(@NonNull UUID uuid, @NonNull E event);
+	/**
+	 * Asyncer's UUID
+	 * 
+	 * @return
+	 */
+	UUID uuid();
 
-    Flux<S> state();
+	/**
+	 * Fire the given event identified by the given UUID
+	 * 
+	 * @param uuid  {@link UUID} of the given event
+	 * @param event The event to fire
+	 * @return {@link Mono} of {@link TransitionResult}
+	 */
+	Mono<TransitionResult<S, E, R>> fire(@NonNull UUID uuid, @NonNull E event);
 
-    @Value
-    public class Transition<S, E> {
+	Flux<StateChange<S>> stateChange();
 
-	@NonNull
-	String name;
+	Flux<TransitionResult<S, E, R>> transitionResult();
 
-	@NonNull
-	S from;
+	@Value
+	public class StateChange<S> {
+		@NonNull
+		UUID uuid;
 
-	@NonNull
-	E event;
-	
-	@Nullable
-	S to;
-
-	@Nullable
-	List<Callable<TaskResult>> tasks;
-
-	@Nullable
-	Class<? extends TaskExecutor> taskExecutor;
-
-	@Nullable
-	Duration timeout;
-	
-	@Nullable
-	S toWhenProcessed;
-
-	@Nullable
-	S toWhenFailed;
-    }
-
-    @Value
-    public class TransitionResult<S, E> {
-
-	@NonNull
-	UUID uuid;
-
-	@NonNull
-	E event;
-
-	@NonNull
-	List<S> states;
-
-	@Nullable
-	Transition<S, E> transition;
-
-	@Nullable
-	List<TaskResult> taskResults;
-
-	@NonNull
-	Boolean result;
-
-	@NonNull
-	String description;
-
-    }
-
-    @Value
-    public class TaskResult {
-
-	@NonNull
-	UUID uuid;
-
-	@NonNull
-	Boolean result;
-
-	@NonNull
-	String description;
-
-    }
-
-    public sealed interface TransitionExecutor<S, E> extends AutoCloseable permits DefaultTransitionExecutorImpl {
-
-	public TransitionResult<S, E> run(@NonNull UUID uuid, @NonNull S state, @NonNull E event, @NonNull Transition<S, E> transition, @NonNull Many<S> stateSink);
-
-	public static <S, E> TransitionExecutor<S, E> of(@NonNull Class<? extends TransitionExecutor<S, E>> executor) {
-	    return new DefaultTransitionExecutorImpl<>();
+		@NonNull
+		S state;
 	}
 
-    }
+	@Value
+	public class Transition<S, E, R> {
 
-    public sealed interface TaskExecutor extends AutoCloseable
-	    permits ParallelFAETaskExecutor, SequentialFAETaskExecutor {
+		@NonNull
+		String name;
 
-	public List<TaskResult> run(@NonNull List<Callable<TaskResult>> tasks, @Nullable Duration timeout);
+		@NonNull
+		S from;
 
-	public static TaskExecutor of(@NonNull Class<? extends TaskExecutor> taskExecutor) {
+		@NonNull
+		E event;
 
-	    if (taskExecutor.equals(ParallelFAETaskExecutor.class)) {
-		return new ParallelFAETaskExecutor();
-	    } else if (taskExecutor.equals(SequentialFAETaskExecutor.class)) {
-		return new SequentialFAETaskExecutor();
-	    }
-	    return new ParallelFAETaskExecutor();
+		@Nullable
+		S to;
+
+		@Nullable
+		List<Callable<TaskResult<R>>> tasks;
+
+		@Nullable
+		Class<? extends TaskExecutor<R>> taskExecutor;
+
+		@Nullable
+		Duration timeout;
+
+		@Nullable
+		S toWhenProcessed;
+
+		@Nullable
+		S toWhenFailed;
+	}
+
+	@Value
+	public class TransitionResult<S, E, R> {
+
+		@NonNull
+		UUID uuid;
+
+		@NonNull
+		E event;
+
+		@Nullable
+		List<S> states;
+
+		@Nullable
+		Transition<S, E, R> transition;
+
+		@Nullable
+		List<TaskResult<R>> taskResults;
+
+		@NonNull
+		Boolean result;
+
+		@NonNull
+		String description;
 
 	}
 
-    }
+	@Value
+	public class TaskResult<R> {
+
+		@NonNull
+		UUID uuid;
+
+		@NonNull
+		R result;
+
+		@NonNull
+		String description;
+
+	}
+
+	public sealed interface TransitionExecutor<S, E, R> extends AutoCloseable permits DefaultTransitionExecutorImpl {
+
+		public TransitionResult<S, E, R> run(@NonNull UUID uuid, @NonNull S state, @NonNull E event,
+				@NonNull Transition<S, E, R> transition, @NonNull Many<StateChange<S>> stateSink);
+
+		// public static <S, E, R> TransitionExecutor<S, E, R> of(
+		// @NonNull Class<? extends TransitionExecutor<S, E, R>> executor) {
+		// return new DefaultTransitionExecutorImpl<>();
+		// }
+
+	}
+
+	public sealed interface TaskExecutor<R> extends AutoCloseable
+			permits ParallelFAETaskExecutor, SequentialFAETaskExecutor {
+
+		public List<TaskResult<R>> run(@NonNull List<Callable<TaskResult<R>>> tasks, @Nullable Duration timeout);
+
+		public static TaskExecutor<Boolean> of(Class<? extends TaskExecutor<Boolean>> taskExecutor) {
+			if (taskExecutor.equals(ParallelFAETaskExecutor.class)) {
+				return new ParallelFAETaskExecutor();
+			}
+			return null;
+		}
+
+		// public static <R> TaskExecutor<R> of(@NonNull Class<? extends
+		// TaskExecutor<R>> taskExecutor) {
+		// if (taskExecutor.equals(ParallelFAETaskExecutor.class)) {
+		// return new ParallelFAETaskExecutor();
+		// } else if (taskExecutor.equals(SequentialFAETaskExecutor.class)) {
+		// return new SequentialFAETaskExecutor();
+		// }
+		// return new ParallelFAETaskExecutor();
+		// }
+
+	}
 
 }
