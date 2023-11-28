@@ -257,6 +257,9 @@ class TcpServerFluxerTest {
 
 		Thread.sleep(5000);
 
+		tcpClient.close();
+		tcpServer.close();
+
 		System.out.println("*** closing ***");
 
 		//

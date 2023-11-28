@@ -172,23 +172,25 @@ public class DefaultAsyncerImpl<S, E, R> implements Asyncer<S, E, R> {
 
 		System.out.println("Asyncer's close() called");
 
-		stateSink.tryEmitComplete();
-		transitionResultSink.tryEmitComplete();
+		if (!isBeingClosed.get()) {
+			stateSink.tryEmitComplete();
+			transitionResultSink.tryEmitComplete();
 
-		// Add
-		// transitionHandler.interrupt();
-		try {
-			System.out.println("Putting poison pill");
-			requests.put(POISON_PILL);
-			isBeingClosed.set(true);
-			System.out.println("Waiting until the poison pill is taken");
-			System.out.println("");
-			while (!requests.isEmpty()) {
-				System.out.print(".");
-				Thread.sleep(Duration.ofMillis(100));
+			// Add
+			// transitionHandler.interrupt();
+			try {
+				System.out.println("Putting poison pill");
+				requests.put(POISON_PILL);
+				isBeingClosed.set(true);
+				System.out.println("Waiting until the poison pill is taken");
+				System.out.println("");
+				while (!requests.isEmpty()) {
+					System.out.print(".");
+					Thread.sleep(Duration.ofMillis(100));
+				}
+				System.out.println("Poison pill is taken");
+			} catch (InterruptedException e) {
 			}
-			System.out.println("Poison pill is taken");
-		} catch (InterruptedException e) {
 		}
 	}
 
