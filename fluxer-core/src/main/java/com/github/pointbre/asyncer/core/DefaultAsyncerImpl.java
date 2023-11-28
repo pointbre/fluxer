@@ -163,6 +163,7 @@ public class DefaultAsyncerImpl<S, E, R> implements Asyncer<S, E, R> {
 
 	@Override
 	public void close() throws Exception {
+		// FIXME If close() is called again, this will do infinite loop
 
 		System.out.println("Asyncer's close() called");
 

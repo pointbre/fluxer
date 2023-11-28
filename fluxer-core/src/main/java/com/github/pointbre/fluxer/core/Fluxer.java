@@ -96,14 +96,14 @@ public interface Fluxer<T> extends AutoCloseable {
 		}
 
 		public enum Event {
-			START, STOP;
+			START, STOP, SEND;
 		}
 
+		/**
+		 * UUID of the state change
+		 */
 		@NonNull
 		UUID uuid;
-
-		@NonNull
-		String id;
 
 		@NonNull
 		Type type;
@@ -111,15 +111,20 @@ public interface Fluxer<T> extends AutoCloseable {
 		@Nullable
 		Event event;
 
-		public State(String id, Type type, Event event) {
-			this.uuid = AsyncerUtil.generateType1UUID();
-			this.id = id;
+		public State(UUID uuid, Type type, Event event) {
+			this.uuid = uuid;
 			this.type = type;
 			this.event = event;
 		}
 
-		public State(String id, Type type) {
-			this(id, type, null);
+		public State(Type type, Event event) {
+			this.uuid = AsyncerUtil.generateType1UUID();
+			this.type = type;
+			this.event = event;
+		}
+
+		public State(Type type) {
+			this(type, null);
 		}
 	}
 
@@ -129,9 +134,15 @@ public interface Fluxer<T> extends AutoCloseable {
 			CONNECTED, DISCONNECTED, NONE;
 		}
 
+		/**
+		 * UUID of the state change
+		 */
 		@NonNull
 		UUID uuid;
 
+		/**
+		 * The unique link id
+		 */
 		@NonNull
 		String id;
 

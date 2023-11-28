@@ -1,8 +1,12 @@
 package com.github.pointbre.fluxer.core;
 
 import java.net.InetSocketAddress;
+import java.time.Duration;
 
 import org.slf4j.event.Level;
+
+import com.github.pointbre.asyncer.core.Asyncer.TaskResult;
+import com.github.pointbre.asyncer.core.AsyncerUtil;
 
 import io.netty.channel.ChannelOption;
 import reactor.core.publisher.Mono;
@@ -26,7 +30,7 @@ public class TcpServerFluxer extends AbstractTcpFluxer implements ServerFluxer<b
 	}
 
 	@Override
-	protected void createTcpConnection() {
+	protected TaskResult<Boolean> createTcpConnection() {
 		TcpServer tcpServer = TcpServer.create()
 				.option(ChannelOption.SO_REUSEADDR, true)
 				.childOption(ChannelOption.TCP_NODELAY, true)
@@ -39,11 +43,11 @@ public class TcpServerFluxer extends AbstractTcpFluxer implements ServerFluxer<b
 					emitLog(Level.INFO, "Server's binding done: " + disposableServer);
 				})
 				.doOnConnection(connection -> {
-					group.add(connection.channel());
+					channelGroup.add(connection.channel());
 					InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
 					InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
 					emitLink(connection.channel().id().asLongText(), Fluxer.Link.State.CONNECTED,
-							new Fluxer.EndPoint(local.getAddress().getHostAddress().toString(), local.getPort()),
+							new Fluxer.EndPoint(local.getAddress().getHostAddress(), local.getPort()),
 							new Fluxer.EndPoint(remote.getAddress().getHostAddress(), remote.getPort()));
 					emitLog(Level.INFO, "A new connection is established: " + connection.channel());
 				})
@@ -53,7 +57,7 @@ public class TcpServerFluxer extends AbstractTcpFluxer implements ServerFluxer<b
 				.doOnChannelInit((connectionObserver, channel, remoteAddress) -> {
 					emitLog(Level.INFO, "Server's channel is initialized");
 				})
-				.channelGroup(group).childObserve((connection, newState) -> {
+				.channelGroup(channelGroup).childObserve((connection, newState) -> {
 					// See ConnectionObserver.State
 					// - If doOnConnection is set, this seems to affect childObserve too as the
 					// event is not passed to child observer
@@ -63,7 +67,8 @@ public class TcpServerFluxer extends AbstractTcpFluxer implements ServerFluxer<b
 					if (newState == ConnectionObserver.State.DISCONNECTING) {
 						InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
 						InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
-						emitLink(connection.channel().id().asLongText(), Fluxer.Link.State.DISCONNECTED,
+						emitLink(connection.channel().id().asLongText(),
+								Fluxer.Link.State.DISCONNECTED,
 								new Fluxer.EndPoint(local.getAddress().getHostAddress(), local.getPort()),
 								new Fluxer.EndPoint(remote.getAddress().getHostAddress(), remote.getPort()));
 						emitLog(Level.INFO, "The connection is closed: " + connection.channel());
@@ -75,47 +80,17 @@ public class TcpServerFluxer extends AbstractTcpFluxer implements ServerFluxer<b
 				.wiretap(true)
 				.noSSL();
 
-		Sinks.One<Fluxer.RequestResult> resultSink = getResultSink(Fluxer.State.Event.START);
-		tcpServer.bind()
-				.subscribe(disposableServer -> {
-					disposableChannel = disposableServer;
-					sendEvent(Fluxer.State.Event.PROCESSED)
-							.subscribe(results -> {
-								if (!isEventAccepted(results)) {
-									resultSink.tryEmitValue(new Fluxer.RequestResult(Fluxer.RequestResult.Type.FAILED,
-											"The request can't be accepted as it's currently "
-													+ getFluxerMachineState()));
-								} else {
-									resultSink.tryEmitValue(new Fluxer.RequestResult(
-											Fluxer.RequestResult.Type.PROCESSED,
-											"TcpServer successfully started at " + getIpAddress() + ":" + getPort()));
-								}
-								removeResultSink(Fluxer.State.Event.START_REQUESTED);
-							}, error -> {
-								resultSink.tryEmitValue(new Fluxer.RequestResult(Fluxer.RequestResult.Type.FAILED,
-										error.getLocalizedMessage()));
-								removeResultSink(Fluxer.State.Event.START_REQUESTED);
-							});
-				}, ex -> {
-					sendEvent(Fluxer.State.Event.FAILED)
-							.subscribe(results -> {
-								if (!isEventAccepted(results)) {
-									resultSink.tryEmitValue(new Fluxer.RequestResult(Fluxer.RequestResult.Type.FAILED,
-											"The request can't be accepted as it's currently "
-													+ getFluxerMachineState()));
-								} else {
-									resultSink.tryEmitValue(new Fluxer.RequestResult(Fluxer.RequestResult.Type.FAILED,
-											"TcpServer failed to start at "
-													+ getIpAddress() + ":" + getPort() + ", "
-													+ ex.getLocalizedMessage()));
-								}
-								removeResultSink(Fluxer.State.Event.START_REQUESTED);
-							}, error -> {
-								resultSink.tryEmitValue(new Fluxer.RequestResult(Fluxer.RequestResult.Type.FAILED,
-										error.getLocalizedMessage()));
-								removeResultSink(Fluxer.State.Event.START_REQUESTED);
-							});
-				});
+		Boolean result = null;
+		String description = null;
+		try {
+			disposableChannel = tcpServer.bindNow(Duration.ofSeconds(5));
+			result = Boolean.TRUE;
+			description = "Successfully started at " + getIpAddress() + ":" + getPort();
+		} catch (Exception e) {
+			result = Boolean.FALSE;
+			description = e.getLocalizedMessage();
+		}
 
+		return new TaskResult<>(AsyncerUtil.generateType1UUID(), result, description);
 	}
 }

@@ -1,15 +1,21 @@
 package com.github.pointbre.fluxer.core;
 
 import java.net.InetSocketAddress;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.function.BiFunction;
+import java.util.stream.Collectors;
 
 import org.reactivestreams.Publisher;
 import org.slf4j.event.Level;
-import org.springframework.statemachine.StateContext;
-import org.springframework.statemachine.action.Action;
+
+import com.github.pointbre.asyncer.core.Asyncer.TaskExecutor;
+import com.github.pointbre.asyncer.core.Asyncer.TaskResult;
+import com.github.pointbre.asyncer.core.AsyncerUtil;
+import com.github.pointbre.asyncer.core.SequentialFAETaskExecutor;
 
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -17,20 +23,15 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.group.ChannelGroup;
-import io.netty.channel.group.ChannelGroupFuture;
-import io.netty.channel.group.ChannelGroupFutureListener;
 import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.util.concurrent.DefaultEventExecutor;
 import io.netty.util.concurrent.EventExecutor;
-import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.GenericFutureListener;
-import lombok.NonNull;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
-import reactor.core.scheduler.Schedulers;
 import reactor.netty.DisposableChannel;
 import reactor.netty.NettyInbound;
 import reactor.netty.NettyOutbound;
+import reactor.util.annotation.NonNull;
 
 public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implements TcpFluxer<byte[]> {
 
@@ -40,12 +41,13 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 
 	protected BiFunction<NettyInbound, NettyOutbound, Publisher<Void>> handler;
 	protected DisposableChannel disposableChannel;
-	protected EventExecutor executor;
-	protected ChannelGroup group;
+	protected EventExecutor eventExecutor;
+	protected ChannelGroup channelGroup;
 
-	public AbstractTcpFluxer(String ipAddress, Integer port) throws Exception {
+	protected AbstractTcpFluxer(String ipAddress, Integer port) throws Exception {
 		super();
 
+		// FIXME Probably better to use custom exception
 		if (ipAddress == null || ipAddress.isBlank()) {
 			Exception exception = new IllegalArgumentException("Invalid ip address: must not be null or blank");
 			emitLog(Level.ERROR, "The given ip address is invalid", exception);
@@ -62,102 +64,63 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 	}
 
 	@Override
-	public Mono<Fluxer.RequestResult> start() {
-		System.out.println("(A)" + Thread.currentThread().getName());
-		final Sinks.One<Fluxer.RequestResult> resultSink = Sinks.one();
-
-		putResultSink(Fluxer.State.Event.START, resultSink);
-		System.out.println("(B)" + Thread.currentThread().getName());
-		sendEvent(Fluxer.State.Event.START)
-				.subscribeOn(Schedulers.single())
-				.subscribe(results -> {
-					System.out.println("(C)" + Thread.currentThread().getName());
-					if (!isEventAccepted(results)) {
-						String log = "START_REQUESTED event wasn't accepted as it's currently "
-								+ getFluxerMachineState();
-						resultSink.tryEmitValue(new Fluxer.RequestResult(Fluxer.RequestResult.Type.FAILED, log));
-						removeResultSink(Fluxer.State.Event.START_REQUESTED);
-						emitLog(Level.ERROR, log);
-					} else {
-						emitLog(Level.INFO, "Sent START_REQUESTED successfully");
-					}
-				}, error -> {
-					System.out.println("(D)" + Thread.currentThread().getName());
-					resultSink.tryEmitValue(
-							new Fluxer.RequestResult(Fluxer.RequestResult.Type.FAILED, error.getLocalizedMessage()));
-					removeResultSink(Fluxer.State.Event.START_REQUESTED);
-					emitLog(Level.ERROR, "Failed to send START_REQUESTED event:" + error.getLocalizedMessage(), error);
-				});
-
-		System.out.println("(E)" + Thread.currentThread().getName());
-		return resultSink.asMono().publishOn(Schedulers.single());
+	public Mono<RequestResult> start() {
+		return triggerEvent(State.Event.START);
 	}
 
 	@Override
-	public Mono<Fluxer.RequestResult> stop() {
-		Sinks.One<Fluxer.RequestResult> resultSink = Sinks.one();
-
-		putResultSink(Fluxer.State.Event.STOP, resultSink);
-		sendEvent(Fluxer.State.Event.STOP)
-				.subscribe(results -> {
-					if (!isEventAccepted(results)) {
-						String log = "STOP_REQUESTED event wasn't accepted as it's currently "
-								+ getFluxerMachineState();
-						resultSink.tryEmitValue(new Fluxer.RequestResult(Fluxer.RequestResult.Type.FAILED, log));
-						removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
-						emitLog(Level.ERROR, log);
-					} else {
-						emitLog(Level.INFO, "Sent START_REQUESTED successfully");
-					}
-				}, error -> {
-					resultSink.tryEmitValue(
-							new Fluxer.RequestResult(Fluxer.RequestResult.Type.FAILED, error.getLocalizedMessage()));
-					removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
-					emitLog(Level.ERROR, "Failed to send STOP_REQUESTED event:" + error.getLocalizedMessage());
-				});
-
-		return resultSink.asMono();
+	public Mono<RequestResult> stop() {
+		return triggerEvent(State.Event.STOP);
 	}
 
 	@Override
-	public Mono<Fluxer.RequestResult> send(byte[] message, Fluxer.EndPoint remote) {
-		Sinks.One<Fluxer.RequestResult> resultSink = Sinks.one();
+	public Mono<RequestResult> send(byte[] message, EndPoint remote) {
+		Sinks.One<RequestResult> resultSink = Sinks.one();
 
-		if (group != null) {
-			Iterator<Channel> channelIterator = group.iterator();
+		// TODO Should check if the current state is STARTED???
+		// TODO Can I use asyncer for this? Hmm, not sure how to pass arguments
+		if (channelGroup != null) {
+			Iterator<Channel> channelIterator = channelGroup.iterator();
 			boolean linkFound = false;
-			Channel channel = null;
+			Channel channelToCheck = null;
 			while (channelIterator.hasNext()) {
-				channel = channelIterator.next();
-				if (isSameLink(channel, remote)) {
+				channelToCheck = channelIterator.next();
+				if (isSameLink(channelToCheck, remote)) {
 					linkFound = true;
 					break;
 				}
 			}
-
-			if (linkFound) {
-				InetSocketAddress localAddress = (InetSocketAddress) channel.localAddress();
-				final Fluxer.EndPoint local = new Fluxer.EndPoint(localAddress.getAddress().getHostAddress(),
-						localAddress.getPort());
-				channel.writeAndFlush(Unpooled.wrappedBuffer(message))
+			final Channel channelFound;
+			if (!linkFound) {
+				channelFound = null;
+			} else {
+				channelFound = channelToCheck;
+			}
+			if (channelFound != null) {
+				final InetSocketAddress localAddress = (InetSocketAddress) channelFound.localAddress();
+				final EndPoint local = new EndPoint(localAddress.getAddress().getHostAddress(), localAddress.getPort());
+				channelFound.writeAndFlush(Unpooled.wrappedBuffer(message))
 						.addListener(new ChannelFutureListener() {
 							@Override
 							public void operationComplete(ChannelFuture future) throws Exception {
 								String log = "Successfully sent to " + remote + ":" + ByteBufUtil.hexDump(message);
 								resultSink.tryEmitValue(
-										new Fluxer.RequestResult(Fluxer.Result.RequestResult.PROCESSED, log));
-								emitMessage(Fluxer.Message.Type.OUTBOUND, local, remote, message);
+										new RequestResult(AsyncerUtil.generateType1UUID(), State.Event.SEND,
+												Boolean.TRUE, log));
+								emitMessage(Message.Type.OUTBOUND, local, remote, message);
 								emitLog(Level.INFO, log);
 							}
 						});
 			} else {
 				String log = "Failed to send a message as matching link is not found: " + remote;
-				resultSink.tryEmitValue(new Fluxer.RequestResult(Fluxer.Result.RequestResult.FAILED, log));
+				resultSink.tryEmitValue(
+						new RequestResult(AsyncerUtil.generateType1UUID(), State.Event.SEND, Boolean.FALSE, log));
 				emitLog(Level.ERROR, log);
 			}
 		} else {
 			String log = "Failed to send a message as no link is not found: " + remote;
-			resultSink.tryEmitValue(new Fluxer.RequestResult(Fluxer.Result.RequestResult.FAILED, log));
+			resultSink.tryEmitValue(
+					new RequestResult(AsyncerUtil.generateType1UUID(), State.Event.SEND, Boolean.FALSE, log));
 			emitLog(Level.ERROR, log);
 		}
 
@@ -174,157 +137,117 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 		return port;
 	}
 
-	abstract protected void createTcpConnection();
+	protected abstract TaskResult<Boolean> createTcpConnection();
 
-	protected Action<Fluxer.State.Type, Fluxer.State.Event> processStartRequest() {
-		return new Action<Fluxer.State.Type, Fluxer.State.Event>() {
+	protected TaskResult<Boolean> processStartRequest() {
 
-			@Override
-			public void execute(StateContext<Fluxer.State.Type, Fluxer.State.Event> context) {
-				handler = createHandler();
-				executor = new DefaultEventExecutor();
-				group = new DefaultChannelGroup(executor);
-				createTcpConnection();
-			}
-		};
+		List<Callable<TaskResult<Boolean>>> tasksToExecute = new ArrayList<>();
+		tasksToExecute.add(() -> {
+			handler = createHandler();
+			eventExecutor = new DefaultEventExecutor();
+			channelGroup = new DefaultChannelGroup(eventExecutor);
+			emitLog(Level.INFO, "Finished creating handler, event executor and channel group");
+			return new TaskResult<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
+					"Finished creating handler, event executor and channel group");
+		});
+		tasksToExecute.add(() -> {
+			emitLog(Level.INFO, "Finished creating a tcp connection");
+			return createTcpConnection();
+		});
+
+		return runTasks(tasksToExecute);
 	}
 
-	protected Action<Fluxer.State.Type, Fluxer.State.Event> processStopRequest() {
-		return new Action<Fluxer.State.Type, Fluxer.State.Event>() {
-
-			@Override
-			public void execute(StateContext<Fluxer.State.Type, Fluxer.State.Event> context) {
-				closeLinks();
-
-				Sinks.One<RequestResult> resultSink = getResultSink(Fluxer.State.Event.STOP);
-
-				sendEvent(Fluxer.State.Event.PROCESSED)
-						.subscribe(results -> {
-							if (isEventAccepted(results)) {
-								if (resultSink != null) {
-									String log = "Successfully stopped";
-									resultSink.tryEmitValue(
-											new Fluxer.RequestResult(Fluxer.RequestResult.Type.PROCESSED, log));
-									removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
-									emitLog(Level.INFO, log);
-								} else {
-									emitLog(Level.ERROR,
-											"Not possible to reply PROCESSED as the result sink of STOP_REQUESTED is not available");
-								}
-							} else {
-								if (resultSink != null) {
-									String log = "PROCESSED event wasn't accepted as it's currently "
-											+ getFluxerMachineState();
-									resultSink.tryEmitValue(
-											new Fluxer.RequestResult(Fluxer.RequestResult.Type.FAILED, log));
-									removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
-									emitLog(Level.ERROR, log);
-								} else {
-									emitLog(Level.ERROR,
-											"Not possible to reply FAILED as the result sink of STOP_REQUESTED is not available");
-								}
-							}
-						}, error -> {
-							if (resultSink != null) {
-								resultSink.tryEmitValue(
-										new Fluxer.RequestResult(Fluxer.RequestResult.Type.FAILED,
-												error.getLocalizedMessage()));
-								removeResultSink(Fluxer.State.Event.STOP_REQUESTED);
-								emitLog(Level.ERROR,
-										"Failed to send START_REQUESTED event:" + error.getLocalizedMessage(), error);
-							} else {
-								emitLog(Level.ERROR,
-										"Not possible to reply FAILED as the result sink of STOP_REQUESTED is not available");
-							}
-						});
+	protected TaskResult<Boolean> processStopRequest() {
+		List<Callable<TaskResult<Boolean>>> tasksToExecute = new ArrayList<>();
+		tasksToExecute.add(() -> {
+			if (disposableChannel != null) {
+				disposableChannel.disposeNow();
+				emitLog(Level.INFO, "Closed the channel");
+			} else {
+				emitLog(Level.INFO, "No need of closing channel as it's null");
 			}
-		};
+
+			return new TaskResult<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
+					"Finished closing disposable channel");
+		});
+
+		tasksToExecute.add(() -> {
+			if (channelGroup != null) {
+				var future = channelGroup.disconnect();
+				future.await();
+				emitLog(Level.INFO, "Disconnected the channel group");
+			} else {
+				emitLog(Level.INFO, "No need of disconnecting group as it's null");
+			}
+			return new TaskResult<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
+					"Finished disconnecting the channel group");
+		});
+
+		tasksToExecute.add(() -> {
+			if (channelGroup != null) {
+				var future = channelGroup.close();
+				future.await();
+				emitLog(Level.INFO, "Closed the channel group");
+			} else {
+				emitLog(Level.INFO, "No need of closing channel as it's null");
+			}
+			return new TaskResult<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
+					"Finished closing the channel group");
+		});
+
+		tasksToExecute.add(() -> {
+			if (eventExecutor != null) {
+				var future = eventExecutor.shutdownGracefully();
+				future.await();
+				emitLog(Level.INFO, "Closed the event executor");
+			} else {
+				emitLog(Level.INFO, "No need of closing executor as it's null");
+			}
+			return new TaskResult<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
+					"Finished creating handler, event executor and channel group");
+		});
+
+		tasksToExecute.add(() -> {
+			disposableChannel = null;
+			channelGroup = null;
+			eventExecutor = null;
+			emitLog(Level.INFO, "Link related resources are closed");
+			return new TaskResult<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
+					"Finished creating handler, event executor and channel group");
+		});
+
+		return runTasks(tasksToExecute);
 	}
 
-	protected void closeLinks() {
-		emitLog(Level.INFO, "Closing link related resources");
+	private Mono<RequestResult> triggerEvent(State.Event event) {
+		final Sinks.One<RequestResult> resultSink = Sinks.one();
+		asyncer.fire(AsyncerUtil.generateType1UUID(), event)
+				.subscribe(transitionResult -> {
+					emitLog(Level.INFO, event + " request processing result: " + transitionResult);
+					resultSink.tryEmitValue(new RequestResult(transitionResult.getUuid(), transitionResult.getEvent(),
+							transitionResult.getResult(), transitionResult.getDescription()));
+				});
 
-		final CountDownLatch countDownLatch1 = new CountDownLatch(1);
-		if (disposableChannel != null) {
-			disposableChannel.dispose();
-			disposableChannel
-					.onDispose()
-					.doOnError(error -> {
-						emitLog(Level.ERROR, "Failed to close channel", error);
-						countDownLatch1.countDown();
-					})
-					.doOnSuccess(__ -> {
-						emitLog(Level.INFO, "Closed channel");
-						countDownLatch1.countDown();
-					})
-					.subscribe();
-		} else {
-			emitLog(Level.INFO, "No need of closing channel as it's null");
-			countDownLatch1.countDown();
-		}
+		return resultSink.asMono();
+	}
+
+	private TaskResult<Boolean> runTasks(List<Callable<TaskResult<Boolean>>> tasksToExecute) {
+		TaskExecutor<Boolean> taskExecutor = new SequentialFAETaskExecutor();
 		try {
-			countDownLatch1.await(MAX_WAIT, TimeUnit.SECONDS);
-		} catch (InterruptedException e) {
+			List<TaskResult<Boolean>> taskResults = taskExecutor.run(tasksToExecute, Duration.ofSeconds(5));
+			boolean allSuccessfullyDone = taskResults.stream().allMatch(tr -> tr.getResult().booleanValue())
+					&& taskResults.size() == tasksToExecute.size();
+			String description = taskResults.stream().map(tr -> tr.getDescription()).collect(Collectors.joining(","));
+			return new TaskResult<>(AsyncerUtil.generateType1UUID(), Boolean.valueOf(allSuccessfullyDone),
+					description);
+		} finally {
+			try {
+				taskExecutor.close();
+			} catch (Exception e) {
+				//
+			}
 		}
-
-		final CountDownLatch countDownLatch2 = new CountDownLatch(1);
-		if (group != null) {
-			group.disconnect().addListener(new ChannelGroupFutureListener() {
-				@Override
-				public void operationComplete(ChannelGroupFuture future) throws Exception {
-					emitLog(Level.INFO, "Disconnected group");
-					countDownLatch2.countDown();
-				}
-			});
-		} else {
-			emitLog(Level.INFO, "No need of disconnecting group as it's null");
-			countDownLatch2.countDown();
-		}
-		try {
-			countDownLatch2.await(MAX_WAIT, TimeUnit.SECONDS);
-		} catch (InterruptedException e) {
-		}
-
-		final CountDownLatch countDownLatch3 = new CountDownLatch(1);
-		if (group != null) {
-			group.close().addListener(new ChannelGroupFutureListener() {
-				@Override
-				public void operationComplete(ChannelGroupFuture future) throws Exception {
-					emitLog(Level.INFO, "Closed group");
-					countDownLatch3.countDown();
-				}
-			});
-		} else {
-			emitLog(Level.INFO, "No need of closing channel as it's null");
-			countDownLatch3.countDown();
-		}
-		try {
-			countDownLatch3.await(MAX_WAIT, TimeUnit.SECONDS);
-		} catch (InterruptedException e) {
-		}
-
-		final CountDownLatch countDownLatch4 = new CountDownLatch(1);
-		if (executor != null) {
-			executor.shutdownGracefully().addListener(new GenericFutureListener<Future<Object>>() {
-				@Override
-				public void operationComplete(Future<Object> future) throws Exception {
-					emitLog(Level.INFO, "Closed executor");
-					countDownLatch4.countDown();
-				}
-			});
-		} else {
-			emitLog(Level.INFO, "No need of closing executor as it's null");
-			countDownLatch4.countDown();
-		}
-		try {
-			countDownLatch4.await(MAX_WAIT, TimeUnit.SECONDS);
-		} catch (InterruptedException e) {
-		}
-
-		disposableChannel = null;
-		group = null;
-		executor = null;
-		emitLog(Level.INFO, "Link related resources are closed");
 	}
 
 	private boolean isSameLink(@NonNull Channel channel, @NonNull EndPoint remote) {
@@ -345,9 +268,9 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 					in.withConnection(connection -> {
 						InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
 						InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
-						emitMessage(Fluxer.Message.Type.INBOUND,
-								new Fluxer.EndPoint(local.getAddress().getHostAddress(), local.getPort()),
-								new Fluxer.EndPoint(remote.getAddress().getHostAddress(), remote.getPort()), buf);
+						emitMessage(Message.Type.INBOUND,
+								new EndPoint(local.getAddress().getHostAddress(), local.getPort()),
+								new EndPoint(remote.getAddress().getHostAddress(), remote.getPort()), buf);
 						String log = "A new message is received from " + connection.channel().localAddress().toString();
 						emitLog(Level.INFO, log);
 					});

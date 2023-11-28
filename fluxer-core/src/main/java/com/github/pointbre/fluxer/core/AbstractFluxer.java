@@ -7,15 +7,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 
 import org.slf4j.event.Level;
-import org.springframework.statemachine.StateContext;
-import org.springframework.statemachine.action.Action;
 
 import com.github.pointbre.asyncer.core.Asyncer;
 import com.github.pointbre.asyncer.core.Asyncer.TaskResult;
 import com.github.pointbre.asyncer.core.Asyncer.Transition;
 import com.github.pointbre.asyncer.core.Asyncer.TransitionExecutor;
+import com.github.pointbre.asyncer.core.AsyncerUtil;
 import com.github.pointbre.asyncer.core.DefaultAsyncerImpl;
 import com.github.pointbre.asyncer.core.DefaultTransitionExecutorImpl;
 import com.github.pointbre.asyncer.core.SequentialFAETaskExecutor;
@@ -29,7 +29,9 @@ import reactor.util.concurrent.Queues;
 
 @Slf4j
 public abstract class AbstractFluxer<T> implements Fluxer<T> {
-	private static final int TIMEOUT = 5;
+
+	private final UUID uuid = AsyncerUtil.generateType1UUID();
+
 	private Many<State> stateSink;
 	private Many<Link> linkSink;
 	private Many<Message<T>> messageSink;
@@ -40,9 +42,9 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 	private Flux<Message<T>> messageFlux;
 	private Flux<Log> logFlux;
 
-	private Asyncer<State.Type, State.Event, Boolean> fluxerMachine;
+	protected Asyncer<State.Type, State.Event, Boolean> asyncer;
 
-	public AbstractFluxer() throws Exception {
+	protected AbstractFluxer() throws Exception {
 
 		stateSink = Sinks
 				.many()
@@ -87,11 +89,18 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 				.log();
 
 		emitLog(Level.INFO, "Starting the internal state machine");
-		fluxerMachine = createAsyncer();
+		asyncer = createAsyncer();
 
-		fluxerMachine.state().subscribe(state -> {
-			stateSink.tryEmitNext(new State(fluxerMachine.uuid(), state));
-		})
+		asyncer.stateChange()
+				.subscribe(state -> {
+					emitLog(Level.INFO, "The state of the internal state machine has changed: " + state);
+					stateSink.tryEmitNext(new State(asyncer.uuid(), state.getState(), null));
+				});
+	}
+
+	@Override
+	public UUID uuid() {
+		return uuid;
 	}
 
 	@Override
@@ -116,10 +125,11 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 
 	@Override
 	public void close() throws Exception {
-		closeLinks();
+
+		processStopRequest();
 
 		emitLog(Level.INFO, "Closing the internal state machine");
-		fluxerMachine.close();
+		asyncer.close();
 
 		if (stateSink != null) {
 			emitLog(Level.INFO, "Closing state flux");
@@ -139,11 +149,9 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 		}
 	}
 
-	protected abstract TaskResult processStartRequest();
+	protected abstract TaskResult<Boolean> processStartRequest();
 
-	protected abstract TaskResult processStopRequest();
-
-	protected abstract void closeLinks();
+	protected abstract TaskResult<Boolean> processStopRequest();
 
 	protected Many<Link> getLinkSink() {
 		return linkSink;
@@ -201,32 +209,19 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 				SequentialFAETaskExecutor.class, null,
 				State.Type.STARTED, State.Type.STOPPED);
 
-		var stopWhenStarted = new Transition<State.Type, State.Event>("", State.Type.STARTED,
-				State.Event.STOP_REQUESTED, State.Type.STOPPING, new ArrayList<>(Arrays.asList(
+		var stopWhenStarted = new Transition<State.Type, State.Event, Boolean>("", State.Type.STARTED,
+				State.Event.STOP, State.Type.STOPPING, new ArrayList<>(Arrays.asList(
 						this::processStopRequest)),
 				SequentialFAETaskExecutor.class, null,
 				State.Type.STOPPED, State.Type.STOPPED);
 
-		Set<Transition<State.Type, State.Event>> transitions = new HashSet<>();
+		Set<Transition<State.Type, State.Event, Boolean>> transitions = new HashSet<>();
 		transitions.add(startWhenStopped);
 		transitions.add(stopWhenStarted);
 
-		TransitionExecutor<State.Type, State.Event> transitionExecutor = new DefaultTransitionExecutorImpl<>();
+		TransitionExecutor<State.Type, State.Event, Boolean> transitionExecutor = new DefaultTransitionExecutorImpl<>();
 
 		return new DefaultAsyncerImpl<>(State.Type.STOPPED, null, transitions, transitionExecutor);
 	}
 
-	private Action<State.Type, State.Event> publishStateChange() {
-		return new Action<State.Type, State.Event>() {
-			@Override
-			public void execute(StateContext<State.Type, State.Event> context) {
-				emitLog(Level.INFO, "The state of the internal state machine has changed: " + context);
-				emitState(context.getTransition().getTarget().getId(), context.getEvent());
-			}
-		};
-	}
-
-	private void emitState(State.Type state, State.Event event) {
-		stateSink.tryEmitNext(new State(getFluxerMachineId(), state, event));
-	}
 }
