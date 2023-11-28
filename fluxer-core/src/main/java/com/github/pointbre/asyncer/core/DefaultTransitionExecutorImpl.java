@@ -19,7 +19,7 @@ public non-sealed class DefaultTransitionExecutorImpl<S, E, R> implements Transi
 	private TaskExecutor<R> taskExecutor = null;
 
 	@Override
-	public TransitionResult<S, E, Boolean> run(@NonNull UUID uuid, @NonNull S state, @NonNull E event,
+	public TransitionResult<S, E, Boolean> run(@NonNull UUID uuid, @NonNull S currentState, @NonNull E event,
 			@NonNull Transition<S, E, Boolean> transition, @NonNull Many<StateChange<S>> stateSink) {
 
 		boolean isToStateSpecified = transition.getTo() != null;

@@ -141,6 +141,8 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 
 	protected TaskResult<Boolean> processStartRequest() {
 
+		System.out.println("Running processStartRequest");
+
 		List<Callable<TaskResult<Boolean>>> tasksToExecute = new ArrayList<>();
 		tasksToExecute.add(() -> {
 			handler = createHandler();
@@ -159,10 +161,17 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 	}
 
 	protected TaskResult<Boolean> processStopRequest() {
+		System.out.println("Running processStopRequest");
 		List<Callable<TaskResult<Boolean>>> tasksToExecute = new ArrayList<>();
 		tasksToExecute.add(() -> {
 			if (disposableChannel != null) {
-				disposableChannel.disposeNow();
+				try {
+					disposableChannel.dispose();
+					disposableChannel.onDispose().block();
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
 				emitLog(Level.INFO, "Closed the channel");
 			} else {
 				emitLog(Level.INFO, "No need of closing channel as it's null");
@@ -176,6 +185,22 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 			if (channelGroup != null) {
 				var future = channelGroup.disconnect();
 				future.await();
+				// final CountDownLatch countDownLatch = new CountDownLatch(1);
+				// try {
+				// channelGroup.disconnect().addListener(new ChannelGroupFutureListener() {
+				// @Override
+				// public void operationComplete(ChannelGroupFuture future) throws Exception {
+				// countDownLatch.countDown();
+				// }
+				// });
+				// try {
+				// countDownLatch.await(MAX_WAIT, TimeUnit.SECONDS);
+				// } catch (InterruptedException e) {
+				// }
+				// } catch (Exception e) {
+				// // TODO Auto-generated catch block
+				// e.printStackTrace();
+				// }
 				emitLog(Level.INFO, "Disconnected the channel group");
 			} else {
 				emitLog(Level.INFO, "No need of disconnecting group as it's null");
@@ -186,8 +211,13 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 
 		tasksToExecute.add(() -> {
 			if (channelGroup != null) {
-				var future = channelGroup.close();
-				future.await();
+				try {
+					var future = channelGroup.close();
+					future.await();
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
 				emitLog(Level.INFO, "Closed the channel group");
 			} else {
 				emitLog(Level.INFO, "No need of closing channel as it's null");
@@ -198,8 +228,13 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 
 		tasksToExecute.add(() -> {
 			if (eventExecutor != null) {
-				var future = eventExecutor.shutdownGracefully();
-				future.await();
+				try {
+					var future = eventExecutor.shutdownGracefully();
+					future.await();
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
 				emitLog(Level.INFO, "Closed the event executor");
 			} else {
 				emitLog(Level.INFO, "No need of closing executor as it's null");

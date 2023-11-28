@@ -116,7 +116,7 @@ public interface Asyncer<S, E, R> extends AutoCloseable {
 
 	public sealed interface TransitionExecutor<S, E, R> extends AutoCloseable permits DefaultTransitionExecutorImpl {
 
-		public TransitionResult<S, E, R> run(@NonNull UUID uuid, @NonNull S state, @NonNull E event,
+		public TransitionResult<S, E, R> run(@NonNull UUID uuid, @NonNull S currentState, @NonNull E event,
 				@NonNull Transition<S, E, R> transition, @NonNull Many<StateChange<S>> stateSink);
 
 		// public static <S, E, R> TransitionExecutor<S, E, R> of(

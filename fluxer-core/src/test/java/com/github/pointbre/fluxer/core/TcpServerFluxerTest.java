@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.github.pointbre.fluxer.core.Fluxer.Link;
 
+import lombok.Cleanup;
 import reactor.core.scheduler.Schedulers;
 
 @ExtendWith(MockitoExtension.class)
@@ -28,10 +29,9 @@ class TcpServerFluxerTest {
 
 	@Test
 	void test() throws Exception {
-		// @Cleanup
+		@Cleanup
 		Fluxer<byte[]> tcpServer = new TcpServerFluxer(LOCALHOST_IP_ADDR, portNumber);
-
-		// @Cleanup
+		@Cleanup
 		final Fluxer<byte[]> tcpClient = new TcpClientFluxer(LOCALHOST_IP_ADDR, portNumber);
 
 		final List<Link> serverLinks = new ArrayList<>();
@@ -55,7 +55,8 @@ class TcpServerFluxerTest {
 					fail("Shouldn't throw an error");
 				}).doOnNext(link -> {
 					serverLinks.add(link);
-					System.out.println("subscriber 1 | Server link received: " + link + ",currently "
+					System.out.println("subscriber 1 | Server link received: " + link +
+							",currently "
 							+ serverLinks.size() + " registered");
 				}).doOnComplete(new Runnable() {
 					@Override
@@ -65,18 +66,19 @@ class TcpServerFluxerTest {
 					}
 				}).subscribe();
 
-		tcpServer.message()
-				.doOnError(error -> {
-					fail("Shouldn't throw an error");
-				}).doOnNext(message -> {
-					System.out.println("subscriber 1 | Server message received: " + new String(message.getMessage()));
-				}).doOnComplete(new Runnable() {
-					@Override
-					public void run() {
-						System.out.println(
-								"subscriber 1 | Server message completed");
-					}
-				}).subscribe();
+		// tcpServer.message()
+		// .doOnError(error -> {
+		// fail("Shouldn't throw an error");
+		// }).doOnNext(message -> {
+		// System.out.println("subscriber 1 | Server message received: " + new
+		// String(message.getMessage()));
+		// }).doOnComplete(new Runnable() {
+		// @Override
+		// public void run() {
+		// System.out.println(
+		// "subscriber 1 | Server message completed");
+		// }
+		// }).subscribe();
 
 		// tcpServer.log()
 		// .doOnError(error -> {
@@ -91,32 +93,32 @@ class TcpServerFluxerTest {
 		// }
 		// }).subscribe();
 
-		// tcpClient.state()
-		// .doOnError(error -> {
-		// fail("Shouldn't throw an error");
-		// }).doOnNext(state -> {
-		// System.out.println("subscriber 1 | client state received: " + state);
-		// }).doOnComplete(new Runnable() {
-		// @Override
-		// public void run() {
-		// System.out.println(
-		// "subscriber 1 | client state completed");
-		// }
-		// }).subscribe();
+		tcpClient.state()
+				.doOnError(error -> {
+					fail("Shouldn't throw an error");
+				}).doOnNext(state -> {
+					System.out.println("subscriber 1 | client state received: " + state);
+				}).doOnComplete(new Runnable() {
+					@Override
+					public void run() {
+						System.out.println(
+								"subscriber 1 | client state completed");
+					}
+				}).subscribe();
 
-		// tcpClient.link()
-		// .doOnError(error -> {
-		// fail("Shouldn't throw an error");
-		// }).doOnNext(link -> {
-		// clientLinks.add(link);
-		// System.out.println("subscriber 1 | client link received: " + link);
-		// }).doOnComplete(new Runnable() {
-		// @Override
-		// public void run() {
-		// System.out.println(
-		// "subscriber 1 | client link completed");
-		// }
-		// }).subscribe();
+		tcpClient.link()
+				.doOnError(error -> {
+					fail("Shouldn't throw an error");
+				}).doOnNext(link -> {
+					clientLinks.add(link);
+					System.out.println("subscriber 1 | client link received: " + link);
+				}).doOnComplete(new Runnable() {
+					@Override
+					public void run() {
+						System.out.println(
+								"subscriber 1 | client link completed");
+					}
+				}).subscribe();
 
 		// tcpClient.message()
 		// .doOnError(error -> {
@@ -173,6 +175,8 @@ class TcpServerFluxerTest {
 		} catch (InterruptedException e) {
 			fail("Client failed to start");
 		}
+
+		System.out.println("(6)" + Thread.currentThread().getName());
 
 		long now4 = System.currentTimeMillis();
 		final CountDownLatch countDownLatch4 = new CountDownLatch(1);
@@ -254,12 +258,6 @@ class TcpServerFluxerTest {
 		Thread.sleep(5000);
 
 		System.out.println("*** closing ***");
-
-		tcpClient.close();
-		tcpServer.close();
-
-		Thread.sleep(5000);
-		System.out.println("*** closed ***");
 
 		//
 		// try {

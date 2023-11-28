@@ -118,6 +118,11 @@ public class DefaultAsyncerImpl<S, E, R> implements Asyncer<S, E, R> {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
+				if (transitionResult.getStates() != null) {
+					transitionResult.getStates().forEach(s -> {
+						currentState = s;
+					});
+				}
 				System.out.println("Processing done: " + transitionResult);
 
 			}
