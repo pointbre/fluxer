@@ -153,6 +153,8 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 
 	protected abstract TaskResult<Boolean> processStopRequest();
 
+	// protected abstract TaskResult<Boolean> processSendRequest();
+
 	protected Many<Link> getLinkSink() {
 		return linkSink;
 	}
@@ -215,9 +217,16 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 				SequentialFAETaskExecutor.class, null,
 				State.Type.STOPPED, State.Type.STOPPED);
 
+		// var sendWhenStarted = new Transition<State.Type, State.Event, Boolean>("",
+		// State.Type.STARTED, State.Event.SEND,
+		// null, new ArrayList<>(Arrays.asList(this::processSendRequest)),
+		// SequentialFAETaskExecutor.class, null,
+		// null, null);
+
 		Set<Transition<State.Type, State.Event, Boolean>> transitions = new HashSet<>();
 		transitions.add(startWhenStopped);
 		transitions.add(stopWhenStarted);
+		// transitions.add(sendWhenStarted);
 
 		TransitionExecutor<State.Type, State.Event, Boolean> transitionExecutor = new DefaultTransitionExecutorImpl<>();
 
