@@ -12,13 +12,13 @@ import java.util.UUID;
 import org.slf4j.event.Level;
 
 import com.github.pointbre.asyncer.core.Asyncer;
-import com.github.pointbre.asyncer.core.Asyncer.TaskResult;
-import com.github.pointbre.asyncer.core.Asyncer.Transition;
-import com.github.pointbre.asyncer.core.Asyncer.TransitionExecutor;
 import com.github.pointbre.asyncer.core.AsyncerUtil;
 import com.github.pointbre.asyncer.core.DefaultAsyncerImpl;
 import com.github.pointbre.asyncer.core.DefaultTransitionExecutorImpl;
 import com.github.pointbre.asyncer.core.SequentialFAETaskExecutor;
+import com.github.pointbre.asyncer.core.TaskResult;
+import com.github.pointbre.asyncer.core.Transition;
+import com.github.pointbre.asyncer.core.TransitionExecutor;
 
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -153,7 +153,7 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 
 	protected abstract TaskResult<Boolean> processStopRequest();
 
-	// protected abstract TaskResult<Boolean> processSendRequest();
+	protected abstract TaskResult<Boolean> processSendRequest();
 
 	protected Many<Link> getLinkSink() {
 		return linkSink;
@@ -217,16 +217,16 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 				SequentialFAETaskExecutor.class, null,
 				State.Type.STOPPED, State.Type.STOPPED);
 
-		// var sendWhenStarted = new Transition<State.Type, State.Event, Boolean>("",
-		// State.Type.STARTED, State.Event.SEND,
-		// null, new ArrayList<>(Arrays.asList(this::processSendRequest)),
-		// SequentialFAETaskExecutor.class, null,
-		// null, null);
+		var sendWhenStarted = new Transition<State.Type, State.Event, Boolean>("",
+				State.Type.STARTED, State.Event.SEND,
+				null, new ArrayList<>(Arrays.asList(this::processSendRequest)),
+				SequentialFAETaskExecutor.class, null,
+				null, null);
 
 		Set<Transition<State.Type, State.Event, Boolean>> transitions = new HashSet<>();
 		transitions.add(startWhenStopped);
 		transitions.add(stopWhenStarted);
-		// transitions.add(sendWhenStarted);
+		transitions.add(sendWhenStarted);
 
 		TransitionExecutor<State.Type, State.Event, Boolean> transitionExecutor = new DefaultTransitionExecutorImpl<>();
 

@@ -4,28 +4,28 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Queue;
-import java.util.concurrent.Callable;
 import java.util.concurrent.LinkedTransferQueue;
 import java.util.concurrent.StructuredTaskScope;
 import java.util.concurrent.TimeoutException;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
-
-import com.github.pointbre.asyncer.core.Asyncer.TaskExecutor;
-import com.github.pointbre.asyncer.core.Asyncer.TaskResult;
 
 import lombok.NonNull;
 import reactor.util.annotation.Nullable;
 
 // FIXME don't extend StructuredTaskScope. Include task scope and use it just like SequentialFAETaskExecutor
-public non-sealed class ParallelFAETaskExecutor extends StructuredTaskScope<TaskResult<Boolean>>
-		implements TaskExecutor<Boolean> {
+public non-sealed class ParallelFAETaskExecutor<S extends State<S>, E extends Event<E>>
+		extends StructuredTaskScope<TaskResult<Boolean>>
+		implements TaskExecutor<S, E, Boolean> {
 
 	private final Queue<TaskResult<Boolean>> taskResults = new LinkedTransferQueue<>();
 
 	@Override
-	public List<TaskResult<Boolean>> run(@NonNull List<Callable<TaskResult<Boolean>>> tasks,
+	public List<TaskResult<Boolean>> run(@NonNull S state, @NonNull E event,
+			@NonNull List<BiFunction<S, E, TaskResult<Boolean>>> tasks,
 			@Nullable Duration timeout) {
-		tasks.stream().forEach(task -> fork(task));
+
+		tasks.stream().forEach(task -> fork(() -> task.apply(state, event)));
 
 		if (timeout == null) {
 			try {

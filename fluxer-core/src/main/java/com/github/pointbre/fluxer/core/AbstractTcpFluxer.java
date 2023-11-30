@@ -12,10 +12,10 @@ import java.util.stream.Collectors;
 import org.reactivestreams.Publisher;
 import org.slf4j.event.Level;
 
-import com.github.pointbre.asyncer.core.Asyncer.TaskExecutor;
-import com.github.pointbre.asyncer.core.Asyncer.TaskResult;
 import com.github.pointbre.asyncer.core.AsyncerUtil;
 import com.github.pointbre.asyncer.core.SequentialFAETaskExecutor;
+import com.github.pointbre.asyncer.core.TaskExecutor;
+import com.github.pointbre.asyncer.core.TaskResult;
 
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
