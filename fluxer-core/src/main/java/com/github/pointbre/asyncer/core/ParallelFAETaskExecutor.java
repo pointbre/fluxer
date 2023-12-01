@@ -14,9 +14,9 @@ import lombok.NonNull;
 import reactor.util.annotation.Nullable;
 
 // FIXME don't extend StructuredTaskScope. Include task scope and use it just like SequentialFAETaskExecutor
-public non-sealed class ParallelFAETaskExecutor<S extends State<S>, E extends Event<E>>
+public non-sealed class ParallelFAETaskExecutor<S extends State<T>, T, E extends Event<F>, F>
 		extends StructuredTaskScope<TaskResult<Boolean>>
-		implements TaskExecutor<S, E, Boolean> {
+		implements TaskExecutor<S, T, E, F, Boolean> {
 
 	private final Queue<TaskResult<Boolean>> taskResults = new LinkedTransferQueue<>();
 

@@ -17,7 +17,7 @@ import reactor.core.publisher.Sinks.One;
 import reactor.util.annotation.Nullable;
 import reactor.util.concurrent.Queues;
 
-public class DefaultAsyncerImpl<S extends State<S>, E extends Event<E>> implements Asyncer<S, E, Boolean> {
+public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> implements Asyncer<S, T, E, F, Boolean> {
 
 	private final UUID uuid = AsyncerUtil.generateType1UUID();
 
@@ -28,31 +28,27 @@ public class DefaultAsyncerImpl<S extends State<S>, E extends Event<E>> implemen
 	private final S finalState;
 
 	@NonNull
-	private final Set<Transition<S, E, Boolean>> transitions;
+	private final Set<Transition<S, T, E, F, Boolean>> transitions;
 
 	@NonNull
-	private final TransitionExecutor<S, E, Boolean> transitionExecutor;
+	private final TransitionExecutor<S, T, E, F, Boolean> transitionExecutor;
 
-	private record Request<S extends State<S>, E extends Event<E>>(UUID uuid, E event,
-			One<TransitionResult<S, E, Boolean>> resultSink) {
-	}
-
-	private final BlockingQueue<Request<S, E>> requests = new LinkedBlockingQueue<>();
+	private final BlockingQueue<Request<S, T, E, F>> requests = new LinkedBlockingQueue<>();
 	private final Thread transitionHandler;
-	private final Request<S, E> POISON_PILL = new Request<>(null, null, null);
+	private final Request<S, T, E, F> POISON_PILL = new Request<>(null, null, null);
 	private final AtomicBoolean isBeingClosed = new AtomicBoolean(false);
 
 	private final Many<StateChange<S>> stateSink = Sinks.many().multicast()
 			.<StateChange<S>>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
 	private S currentState;
 
-	private final Many<TransitionResult<S, E, Boolean>> transitionResultSink = Sinks.many().multicast()
-			.<TransitionResult<S, E, Boolean>>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE,
+	private final Many<TransitionResult<S, T, E, F, Boolean>> transitionResultSink = Sinks.many().multicast()
+			.<TransitionResult<S, T, E, F, Boolean>>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE,
 					false);
 
 	public DefaultAsyncerImpl(@NonNull S initialState, @Nullable S finalState,
-			@NonNull Set<Transition<S, E, Boolean>> transitions,
-			@NonNull TransitionExecutor<S, E, Boolean> transitionExecutor) {
+			@NonNull Set<Transition<S, T, E, F, Boolean>> transitions,
+			@NonNull TransitionExecutor<S, T, E, F, Boolean> transitionExecutor) {
 
 		this.initialState = initialState;
 		this.finalState = finalState;
@@ -63,7 +59,7 @@ public class DefaultAsyncerImpl<S extends State<S>, E extends Event<E>> implemen
 		this.transitionHandler = Thread.ofVirtual().name("asyncer-transition-handler").start(() -> {
 
 			while (true) {
-				Request<S, E> request = null;
+				Request<S, T, E, F> request = null;
 
 				try {
 					request = requests.take();
@@ -81,7 +77,7 @@ public class DefaultAsyncerImpl<S extends State<S>, E extends Event<E>> implemen
 
 				final UUID uuidOfRequest = request.uuid();
 				final E eventOfRequest = request.event();
-				One<TransitionResult<S, E, Boolean>> resultSinkOfRequest = request.resultSink();
+				One<TransitionResult<S, T, E, F, Boolean>> resultSinkOfRequest = request.resultSink();
 
 				if (finalState != null && currentState.equals(finalState)) {
 					resultSinkOfRequest.tryEmitValue(
@@ -90,8 +86,8 @@ public class DefaultAsyncerImpl<S extends State<S>, E extends Event<E>> implemen
 					continue;
 				}
 
-				final Optional<Transition<S, E, Boolean>> matchingTransition = transitions.stream()
-						.filter(t -> t.getFrom().equals(currentState)
+				final Optional<Transition<S, T, E, F, Boolean>> matchingTransition = transitions.stream()
+						.filter(t -> t.getFrom().getType().equals(currentState.getType())
 								&& t.getEvent().getType().equals(eventOfRequest.getType()))
 						.findFirst();
 				if (!matchingTransition.isPresent()) {
@@ -110,8 +106,8 @@ public class DefaultAsyncerImpl<S extends State<S>, E extends Event<E>> implemen
 				}
 
 				System.out.println("Running");
-				final Transition<S, E, Boolean> transition = matchingTransition.get();
-				final TransitionResult<S, E, Boolean> transitionResult = transitionExecutor.run(uuidOfRequest,
+				final Transition<S, T, E, F, Boolean> transition = matchingTransition.get();
+				final TransitionResult<S, T, E, F, Boolean> transitionResult = transitionExecutor.run(uuidOfRequest,
 						currentState, eventOfRequest, transition, stateSink);
 
 				System.out.println("Returned transition result=" + transitionResult);
@@ -141,14 +137,15 @@ public class DefaultAsyncerImpl<S extends State<S>, E extends Event<E>> implemen
 	}
 
 	@Override
-	public Mono<TransitionResult<S, E, Boolean>> fire(@NonNull UUID uuid, @NonNull E event) {
+	public Mono<TransitionResult<S, T, E, F, Boolean>> fire(@NonNull UUID uuid, @NonNull E event) {
 
-		final One<TransitionResult<S, E, Boolean>> resultSink = Sinks.one();
+		final One<TransitionResult<S, T, E, F, Boolean>> resultSink = Sinks.one();
 
 		try {
 			requests.put(new Request<>(uuid, event, resultSink));
 		} catch (InterruptedException e) {
-			TransitionResult<S, E, Boolean> transitionResult = new TransitionResult<>(uuid, event, null, null, null,
+			TransitionResult<S, T, E, F, Boolean> transitionResult = new TransitionResult<>(uuid, event, null, null,
+					null,
 					Boolean.FALSE, "Failed to fire the event: " + event);
 			resultSink.tryEmitValue(transitionResult);
 			transitionResultSink.tryEmitNext(transitionResult);
@@ -164,7 +161,7 @@ public class DefaultAsyncerImpl<S extends State<S>, E extends Event<E>> implemen
 	}
 
 	@Override
-	public Flux<TransitionResult<S, E, Boolean>> transitionResult() {
+	public Flux<TransitionResult<S, T, E, F, Boolean>> transitionResult() {
 		return transitionResultSink.asFlux();
 	}
 

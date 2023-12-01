@@ -11,8 +11,8 @@ import java.util.function.BiFunction;
 import lombok.NonNull;
 import reactor.util.annotation.Nullable;
 
-public non-sealed class SequentialFAETaskExecutor<S extends State<S>, E extends Event<E>>
-		implements TaskExecutor<S, E, Boolean> {
+public non-sealed class SequentialFAETaskExecutor<S extends State<T>, T, E extends Event<F>, F>
+		implements TaskExecutor<S, T, E, F, Boolean> {
 
 	private final List<TaskResult<Boolean>> taskResults = new ArrayList<>();
 	private final List<ShutdownOnSuccess<TaskResult<Boolean>>> scopes = new ArrayList<>();

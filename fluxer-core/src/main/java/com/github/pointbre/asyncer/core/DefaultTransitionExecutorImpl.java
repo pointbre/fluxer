@@ -7,14 +7,14 @@ import java.util.UUID;
 import lombok.NonNull;
 import reactor.core.publisher.Sinks.Many;
 
-public non-sealed class DefaultTransitionExecutorImpl<S extends State<S>, E extends Event<E>>
-		implements TransitionExecutor<S, E, Boolean> {
+public non-sealed class DefaultTransitionExecutorImpl<S extends State<T>, T, E extends Event<F>, F>
+		implements TransitionExecutor<S, T, E, F, Boolean> {
 
-	private TaskExecutor<S, E, Boolean> taskExecutor = null;
+	private TaskExecutor<S, T, E, F, Boolean> taskExecutor = null;
 
 	@Override
-	public TransitionResult<S, E, Boolean> run(@NonNull UUID uuid, @NonNull S state, @NonNull E event,
-			@NonNull Transition<S, E, Boolean> transition, @NonNull Many<StateChange<S>> stateSink) {
+	public TransitionResult<S, T, E, F, Boolean> run(@NonNull UUID uuid, @NonNull S state, @NonNull E event,
+			@NonNull Transition<S, T, E, F, Boolean> transition, @NonNull Many<StateChange<S>> stateSink) {
 
 		List<S> states = new ArrayList<>();
 		List<TaskResult<Boolean>> taskResults = null;

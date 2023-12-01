@@ -7,10 +7,11 @@ import java.util.function.BiFunction;
 import lombok.NonNull;
 import reactor.util.annotation.Nullable;
 
-public sealed interface TaskExecutor<S extends State<S>, E extends Event<E>, R>
-        extends AutoCloseable
-        permits ParallelFAETaskExecutor, SequentialFAETaskExecutor {
+public sealed interface TaskExecutor<S extends State<T>, T, E extends Event<F>, F, R>
+                extends AutoCloseable
+                permits ParallelFAETaskExecutor, SequentialFAETaskExecutor {
 
-    public List<TaskResult<R>> run(@NonNull S state, @NonNull E event,
-            @NonNull List<BiFunction<S, E, TaskResult<R>>> tasks, @Nullable Duration timeout);
+        public List<TaskResult<R>> run(@NonNull S state, @NonNull E event,
+                        @NonNull List<BiFunction<S, E, TaskResult<R>>> tasks,
+                        @Nullable Duration timeout);
 }

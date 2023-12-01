@@ -5,9 +5,11 @@ import java.util.UUID;
 import lombok.NonNull;
 import reactor.core.publisher.Sinks.Many;
 
-public sealed interface TransitionExecutor<S extends State<S>, E extends Event<E>, R>
-        extends AutoCloseable permits DefaultTransitionExecutorImpl {
+public sealed interface TransitionExecutor<S extends State<T>, T, E extends Event<F>, F, R>
+                extends AutoCloseable permits DefaultTransitionExecutorImpl {
 
-    public TransitionResult<S, E, R> run(@NonNull UUID uuid, @NonNull S state, @NonNull E event,
-            @NonNull Transition<S, E, R> transition, @NonNull Many<StateChange<S>> stateSink);
+        public TransitionResult<S, T, E, F, R> run(@NonNull UUID uuid,
+                        @NonNull S state, @NonNull E event,
+                        @NonNull Transition<S, T, E, F, R> transition,
+                        @NonNull Many<StateChange<S>> stateSink);
 }

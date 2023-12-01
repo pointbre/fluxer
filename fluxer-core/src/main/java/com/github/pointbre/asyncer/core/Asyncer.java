@@ -6,14 +6,14 @@ import lombok.NonNull;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-public interface Asyncer<S extends State<S>, E extends Event<E>, R> extends AutoCloseable {
+public interface Asyncer<S extends State<T>, T, E extends Event<F>, F, R> extends AutoCloseable {
 
 	UUID uuid();
 
-	Mono<TransitionResult<S, E, R>> fire(@NonNull UUID uuid, @NonNull E event);
+	Mono<TransitionResult<S, T, E, F, R>> fire(@NonNull UUID uuid, @NonNull E event);
 
 	Flux<StateChange<S>> stateChange();
 
-	Flux<TransitionResult<S, E, R>> transitionResult();
+	Flux<TransitionResult<S, T, E, F, R>> transitionResult();
 
 }
