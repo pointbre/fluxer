@@ -4,6 +4,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.github.pointbre.asyncer.core.Asyncer.Change;
+import com.github.pointbre.asyncer.core.Asyncer.Event;
+import com.github.pointbre.asyncer.core.Asyncer.Result;
+import com.github.pointbre.asyncer.core.Asyncer.State;
+import com.github.pointbre.asyncer.core.Asyncer.TaskExecutor;
+import com.github.pointbre.asyncer.core.Asyncer.Transition;
+import com.github.pointbre.asyncer.core.Asyncer.TransitionExecutor;
+import com.github.pointbre.asyncer.core.Asyncer.TransitionResult;
+
 import lombok.NonNull;
 import reactor.core.publisher.Sinks.Many;
 
@@ -14,17 +23,17 @@ public non-sealed class DefaultTransitionExecutorImpl<S extends State<T>, T, E e
 
 	@Override
 	public TransitionResult<S, T, E, F, Boolean> run(@NonNull UUID uuid, @NonNull S state, @NonNull E event,
-			@NonNull Transition<S, T, E, F, Boolean> transition, @NonNull Many<StateChange<S>> stateSink) {
+			@NonNull Transition<S, T, E, F, Boolean> transition, @NonNull Many<Change<S>> stateSink) {
 
 		List<S> states = new ArrayList<>();
-		List<TaskResult<Boolean>> taskResults = null;
+		List<Result<Boolean>> taskResults = null;
 
 		if (transition.getTo() != null) {
 			S firstState = transition.getTo();
 			states.add(firstState);
 
 			try {
-				stateSink.tryEmitNext(new StateChange<>(AsyncerUtil.generateType1UUID(), firstState));
+				stateSink.tryEmitNext(new Change<>(AsyncerUtil.generateType1UUID(), "", firstState));
 			} catch (Exception e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -39,13 +48,13 @@ public non-sealed class DefaultTransitionExecutorImpl<S extends State<T>, T, E e
 					&& transition.getToWhenFailed() != null) {
 				S secondState = transition.getToWhenFailed();
 				if (transition.getTasks().size() == taskResults.size()
-						&& taskResults.stream().allMatch(r -> r.getResult().booleanValue())) {
+						&& taskResults.stream().allMatch(r -> r.getValue().booleanValue())) {
 					secondState = transition.getToWhenProcessed();
 				}
 				states.add(secondState);
 
 				try {
-					stateSink.tryEmitNext(new StateChange<>(AsyncerUtil.generateType1UUID(), secondState));
+					stateSink.tryEmitNext(new Change<>(AsyncerUtil.generateType1UUID(), "", secondState));
 				} catch (Exception e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -53,8 +62,8 @@ public non-sealed class DefaultTransitionExecutorImpl<S extends State<T>, T, E e
 			}
 		}
 
-		return new TransitionResult<>(uuid, event, states, transition, taskResults, Boolean.TRUE,
-				"Successfully executed the transition");
+		return new TransitionResult<>(uuid, "Successfully executed the transition", Boolean.TRUE, event, states,
+				transition, taskResults);
 	}
 
 	@Override

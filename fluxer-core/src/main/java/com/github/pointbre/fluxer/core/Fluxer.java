@@ -5,8 +5,10 @@ import java.util.UUID;
 
 import org.slf4j.event.Level;
 
+import com.github.pointbre.asyncer.core.Asyncer;
 import com.github.pointbre.asyncer.core.AsyncerUtil;
 
+import lombok.EqualsAndHashCode;
 import lombok.NonNull;
 import lombok.Value;
 import reactor.core.publisher.Flux;
@@ -15,116 +17,62 @@ import reactor.util.annotation.Nullable;
 
 public interface Fluxer<T> extends AutoCloseable {
 
-	/**
-	 * Fluxer's UUID
-	 * 
-	 * @return
-	 */
 	UUID uuid();
 
-	/**
-	 * Starts up Fluxer
-	 * 
-	 * @return {@link Mono} of {@link RequestResult}
-	 */
+	Flux<Asyncer.Change<State>> state();
+
+	Flux<Asyncer.Change<Link>> link();
+
+	Flux<Asyncer.Change<Message<T>>> message();
+
+	Flux<Asyncer.Change<Log>> log();
+
 	Mono<RequestResult> start();
 
-	/**
-	 * Stops Fluxer
-	 * 
-	 * @return {@link Mono} of {@link RequestResult}
-	 */
 	Mono<RequestResult> stop();
 
-	/**
-	 * Send the byte array to the remote {@link EndPoint}
-	 * 
-	 * @param message
-	 * @param remote
-	 * @return
-	 */
 	Mono<RequestResult> send(T message, EndPoint remote);
 
-	/**
-	 * Provides the stream of {@link State} changes
-	 * 
-	 * @return {@link Flux} of {@link State}
-	 */
-	Flux<State> state();
-
-	/**
-	 * Provides the stream of {@link Link} changes
-	 * 
-	 * @return {@link Flux} of {@link Link}
-	 */
-	Flux<Link> link();
-
-	/**
-	 * Provides the stream of inbound and outbound {@link Message} changes
-	 * 
-	 * @return {@link Flux} of {@link Message}
-	 */
-	Flux<Message<T>> message();
-
-	/**
-	 * Provides the stream of Fluxer's {@link Log} changes
-	 * 
-	 * @return {@link Flux} of {@link Log}
-	 */
-	Flux<Log> log();
-
 	@Value
-	public class RequestResult {
-
-		@NonNull
-		UUID uuid;
+	public class RequestResult extends Asyncer.Result<Boolean> {
 
 		@NonNull
 		State.Event event;
 
-		@NonNull
-		Boolean result;
-
-		@NonNull
-		String description;
 	}
 
 	@Value
-	public class State {
+	@EqualsAndHashCode(callSuper = true)
+	public class State extends Asyncer.State<State.Type> {
+
 		public enum Type {
 			STARTING, STARTED, STOPPING, STOPPED
 		}
 
-		public enum Event {
+		public State(Type type) {
+			super(type);
+		}
+
+		@Override
+		public String toString() {
+			return this.getType().name();
+		}
+	}
+
+	@Value
+	@EqualsAndHashCode(callSuper = true)
+	public class Event extends Asyncer.Event<Event.Type> {
+		public enum Type {
 			START, STOP, SEND;
 		}
 
-		/**
-		 * UUID of the state change
-		 */
-		@NonNull
-		UUID uuid;
-
-		@NonNull
-		Type type;
-
-		@Nullable
-		Event event;
-
-		public State(UUID uuid, Type type, Event event) {
-			this.uuid = uuid;
-			this.type = type;
-			this.event = event;
+		public Event(Type type) {
+			super(type);
 		}
 
-		public State(Type type, Event event) {
-			this.uuid = AsyncerUtil.generateType1UUID();
-			this.type = type;
-			this.event = event;
-		}
-
-		public State(Type type) {
-			this(type, null);
+		@Override
+		public String toString() {
+			return this.getType().name();
 		}
 	}
 

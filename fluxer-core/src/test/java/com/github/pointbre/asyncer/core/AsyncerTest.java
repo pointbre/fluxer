@@ -14,11 +14,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.github.pointbre.asyncer.core.Asyncer.Event;
+import com.github.pointbre.asyncer.core.Asyncer.Result;
+import com.github.pointbre.asyncer.core.Asyncer.State;
+import com.github.pointbre.asyncer.core.Asyncer.Transition;
+import com.github.pointbre.asyncer.core.Asyncer.TransitionExecutor;
+
 import lombok.EqualsAndHashCode;
 import lombok.Value;
 
 @ExtendWith(MockitoExtension.class)
-public class AsyncerTest {
+class AsyncerTest {
 
 	@Value
 	@EqualsAndHashCode(callSuper = true)
@@ -74,19 +80,18 @@ public class AsyncerTest {
 
 		// var lockedToUnlocked = new Asyncer.StaticTransition(locked, coin, null,
 		// unlocked);
-		List<BiFunction<TestState, TestEvent, TaskResult<Boolean>>> tasks1 = new ArrayList<>(
+		List<BiFunction<TestState, TestEvent, Result<Boolean>>> tasks1 = new ArrayList<>(
 				Arrays.asList(
 						(state, event) -> {
 							System.out.println("inside of task: state=" + state + ", event=" + event);
-							return new TaskResult<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
-									"done");
+							return new Result<>(AsyncerUtil.generateType1UUID(), "done", Boolean.TRUE);
 						}));
 
 		Transition<TestState, TestState.Type, TestEvent, TestEvent.Type, Boolean> stoppedToStartingAndThenStartedOrStopped = new Transition<>(
 				"",
 				new TestState(TestState.Type.STOPPED),
 				new TestEvent(TestEvent.Type.START),
-				new TestState(TestState.Type.STARTING), tasks1, new SequentialFAETaskExecutor<>(),
+				new TestState(TestState.Type.STARTING), tasks1, new SequentialFAETaskExecutorImpl<>(),
 				null, new TestState(TestState.Type.STARTED), new TestState(TestState.Type.STOPPED));
 
 		Set<Transition<TestState, TestState.Type, TestEvent, TestEvent.Type, Boolean>> transitions = new HashSet<>();
@@ -102,7 +107,7 @@ public class AsyncerTest {
 
 			System.out.println("1");
 
-			asyncer.stateChange().subscribe(s -> {
+			asyncer.state().subscribe(s -> {
 				System.out.println("state updated=" + s + " at " + new Date());
 			}, e -> {
 				System.out.println("state error=" + e);

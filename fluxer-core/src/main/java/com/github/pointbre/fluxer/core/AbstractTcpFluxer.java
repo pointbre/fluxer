@@ -13,9 +13,9 @@ import org.reactivestreams.Publisher;
 import org.slf4j.event.Level;
 
 import com.github.pointbre.asyncer.core.AsyncerUtil;
-import com.github.pointbre.asyncer.core.SequentialFAETaskExecutor;
+import com.github.pointbre.asyncer.core.SequentialFAETaskExecutorImpl;
 import com.github.pointbre.asyncer.core.TaskExecutor;
-import com.github.pointbre.asyncer.core.TaskResult;
+import com.github.pointbre.fluxer.core.Fluxer.RequestResult;
 
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -137,19 +137,19 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 		return port;
 	}
 
-	protected abstract TaskResult<Boolean> createTcpConnection();
+	protected abstract Result<Boolean> createTcpConnection();
 
-	protected TaskResult<Boolean> processStartRequest() {
+	protected Result<Boolean> processStartRequest() {
 
 		System.out.println("Running processStartRequest");
 
-		List<Callable<TaskResult<Boolean>>> tasksToExecute = new ArrayList<>();
+		List<Callable<Result<Boolean>>> tasksToExecute = new ArrayList<>();
 		tasksToExecute.add(() -> {
 			handler = createHandler();
 			eventExecutor = new DefaultEventExecutor();
 			channelGroup = new DefaultChannelGroup(eventExecutor);
 			emitLog(Level.INFO, "Finished creating handler, event executor and channel group");
-			return new TaskResult<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
+			return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
 					"Finished creating handler, event executor and channel group");
 		});
 		tasksToExecute.add(() -> {
@@ -160,9 +160,9 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 		return runTasks(tasksToExecute);
 	}
 
-	protected TaskResult<Boolean> processStopRequest() {
+	protected Result<Boolean> processStopRequest() {
 		System.out.println("Running processStopRequest");
-		List<Callable<TaskResult<Boolean>>> tasksToExecute = new ArrayList<>();
+		List<Callable<Result<Boolean>>> tasksToExecute = new ArrayList<>();
 		tasksToExecute.add(() -> {
 			if (disposableChannel != null) {
 				try {
@@ -177,7 +177,7 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 				emitLog(Level.INFO, "No need of closing channel as it's null");
 			}
 
-			return new TaskResult<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
+			return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
 					"Finished closing disposable channel");
 		});
 
@@ -205,7 +205,7 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 			} else {
 				emitLog(Level.INFO, "No need of disconnecting group as it's null");
 			}
-			return new TaskResult<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
+			return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
 					"Finished disconnecting the channel group");
 		});
 
@@ -222,7 +222,7 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 			} else {
 				emitLog(Level.INFO, "No need of closing channel as it's null");
 			}
-			return new TaskResult<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
+			return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
 					"Finished closing the channel group");
 		});
 
@@ -239,7 +239,7 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 			} else {
 				emitLog(Level.INFO, "No need of closing executor as it's null");
 			}
-			return new TaskResult<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
+			return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
 					"Finished creating handler, event executor and channel group");
 		});
 
@@ -248,7 +248,7 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 			channelGroup = null;
 			eventExecutor = null;
 			emitLog(Level.INFO, "Link related resources are closed");
-			return new TaskResult<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
+			return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
 					"Finished creating handler, event executor and channel group");
 		});
 
@@ -261,20 +261,20 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 				.subscribe(transitionResult -> {
 					emitLog(Level.INFO, event + " request processing result: " + transitionResult);
 					resultSink.tryEmitValue(new RequestResult(transitionResult.getUuid(), transitionResult.getEvent(),
-							transitionResult.getResult(), transitionResult.getDescription()));
+							transitionResult.getValue(), transitionResult.getDescription()));
 				});
 
 		return resultSink.asMono();
 	}
 
-	private TaskResult<Boolean> runTasks(List<Callable<TaskResult<Boolean>>> tasksToExecute) {
-		TaskExecutor<Boolean> taskExecutor = new SequentialFAETaskExecutor();
+	private Result<Boolean> runTasks(List<Callable<Result<Boolean>>> tasksToExecute) {
+		TaskExecutor<Boolean> taskExecutor = new SequentialFAETaskExecutorImpl();
 		try {
-			List<TaskResult<Boolean>> taskResults = taskExecutor.run(tasksToExecute, Duration.ofSeconds(5));
-			boolean allSuccessfullyDone = taskResults.stream().allMatch(tr -> tr.getResult().booleanValue())
+			List<Result<Boolean>> taskResults = taskExecutor.run(tasksToExecute, Duration.ofSeconds(5));
+			boolean allSuccessfullyDone = taskResults.stream().allMatch(tr -> tr.getValue().booleanValue())
 					&& taskResults.size() == tasksToExecute.size();
 			String description = taskResults.stream().map(tr -> tr.getDescription()).collect(Collectors.joining(","));
-			return new TaskResult<>(AsyncerUtil.generateType1UUID(), Boolean.valueOf(allSuccessfullyDone),
+			return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.valueOf(allSuccessfullyDone),
 					description);
 		} finally {
 			try {

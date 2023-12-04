@@ -5,8 +5,8 @@ import java.time.Duration;
 
 import org.slf4j.event.Level;
 
-import com.github.pointbre.asyncer.core.AsyncerUtil;
 import com.github.pointbre.asyncer.core.Asyncer.TaskResult;
+import com.github.pointbre.asyncer.core.AsyncerUtil;
 
 import io.netty.channel.ChannelOption;
 import reactor.core.publisher.Mono;
@@ -30,7 +30,7 @@ public class TcpServerFluxer extends AbstractTcpFluxer implements ServerFluxer<b
 	}
 
 	@Override
-	protected TaskResult<Boolean> createTcpConnection() {
+	protected Result<Boolean> createTcpConnection() {
 		TcpServer tcpServer = TcpServer.create()
 				.option(ChannelOption.SO_REUSEADDR, true)
 				.childOption(ChannelOption.TCP_NODELAY, true)

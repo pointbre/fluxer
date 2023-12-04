@@ -12,13 +12,12 @@ import java.util.UUID;
 import org.slf4j.event.Level;
 
 import com.github.pointbre.asyncer.core.Asyncer;
+import com.github.pointbre.asyncer.core.Asyncer.Transition;
+import com.github.pointbre.asyncer.core.Asyncer.TransitionExecutor;
 import com.github.pointbre.asyncer.core.AsyncerUtil;
 import com.github.pointbre.asyncer.core.DefaultAsyncerImpl;
 import com.github.pointbre.asyncer.core.DefaultTransitionExecutorImpl;
-import com.github.pointbre.asyncer.core.SequentialFAETaskExecutor;
-import com.github.pointbre.asyncer.core.TaskResult;
-import com.github.pointbre.asyncer.core.Transition;
-import com.github.pointbre.asyncer.core.TransitionExecutor;
+import com.github.pointbre.asyncer.core.SequentialFAETaskExecutorImpl;
 
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -42,7 +41,7 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 	private Flux<Message<T>> messageFlux;
 	private Flux<Log> logFlux;
 
-	protected Asyncer<State.Type, State.Event, Boolean> asyncer;
+	protected Asyncer<State, State.Type, State.Event, Boolean> asyncer;
 
 	protected AbstractFluxer() throws Exception {
 
@@ -91,10 +90,10 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 		emitLog(Level.INFO, "Starting the internal state machine");
 		asyncer = createAsyncer();
 
-		asyncer.stateChange()
+		asyncer.state()
 				.subscribe(state -> {
 					emitLog(Level.INFO, "The state of the internal state machine has changed: " + state);
-					stateSink.tryEmitNext(new State(asyncer.uuid(), state.getState(), null));
+					stateSink.tryEmitNext(new State(asyncer.uuid(), state.getValue(), null));
 				});
 	}
 
@@ -149,11 +148,11 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 		}
 	}
 
-	protected abstract TaskResult<Boolean> processStartRequest();
+	protected abstract Result<Boolean> processStartRequest();
 
-	protected abstract TaskResult<Boolean> processStopRequest();
+	protected abstract Result<Boolean> processStopRequest();
 
-	protected abstract TaskResult<Boolean> processSendRequest();
+	protected abstract Result<Boolean> processSendRequest();
 
 	protected Many<Link> getLinkSink() {
 		return linkSink;
@@ -208,19 +207,19 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 		var startWhenStopped = new Transition<State.Type, State.Event, Boolean>("", State.Type.STOPPED,
 				State.Event.START, State.Type.STARTING, new ArrayList<>(Arrays.asList(
 						this::processStartRequest)),
-				SequentialFAETaskExecutor.class, null,
+				SequentialFAETaskExecutorImpl.class, null,
 				State.Type.STARTED, State.Type.STOPPED);
 
 		var stopWhenStarted = new Transition<State.Type, State.Event, Boolean>("", State.Type.STARTED,
 				State.Event.STOP, State.Type.STOPPING, new ArrayList<>(Arrays.asList(
 						this::processStopRequest)),
-				SequentialFAETaskExecutor.class, null,
+				SequentialFAETaskExecutorImpl.class, null,
 				State.Type.STOPPED, State.Type.STOPPED);
 
 		var sendWhenStarted = new Transition<State.Type, State.Event, Boolean>("",
 				State.Type.STARTED, State.Event.SEND,
 				null, new ArrayList<>(Arrays.asList(this::processSendRequest)),
-				SequentialFAETaskExecutor.class, null,
+				SequentialFAETaskExecutorImpl.class, null,
 				null, null);
 
 		Set<Transition<State.Type, State.Event, Boolean>> transitions = new HashSet<>();

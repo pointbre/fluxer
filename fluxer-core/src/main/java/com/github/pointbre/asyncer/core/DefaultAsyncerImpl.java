@@ -8,6 +8,9 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.github.pointbre.asyncer.core.Asyncer.Event;
+import com.github.pointbre.asyncer.core.Asyncer.State;
+
 import lombok.NonNull;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -38,8 +41,8 @@ public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> im
 	private final Request<S, T, E, F> POISON_PILL = new Request<>(null, null, null);
 	private final AtomicBoolean isBeingClosed = new AtomicBoolean(false);
 
-	private final Many<StateChange<S>> stateSink = Sinks.many().multicast()
-			.<StateChange<S>>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
+	private final Many<Change<S>> stateSink = Sinks.many().multicast()
+			.<Change<S>>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
 	private S currentState;
 
 	private final Many<TransitionResult<S, T, E, F, Boolean>> transitionResultSink = Sinks.many().multicast()
@@ -81,8 +84,8 @@ public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> im
 
 				if (finalState != null && currentState.equals(finalState)) {
 					resultSinkOfRequest.tryEmitValue(
-							new TransitionResult<>(uuidOfRequest, eventOfRequest, null, null, null, Boolean.FALSE,
-									eventOfRequest + " is a final state"));
+							new TransitionResult<>(uuidOfRequest, eventOfRequest + " is a final state", Boolean.FALSE,
+									eventOfRequest, null, null, null));
 					continue;
 				}
 
@@ -91,17 +94,18 @@ public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> im
 								&& t.getEvent().getType().equals(eventOfRequest.getType()))
 						.findFirst();
 				if (!matchingTransition.isPresent()) {
-					resultSinkOfRequest.tryEmitValue(new TransitionResult<>(uuidOfRequest, eventOfRequest, null, null,
-							null, Boolean.FALSE,
-							"No matching transition found from " + currentState + " triggered by " + eventOfRequest));
+					resultSinkOfRequest.tryEmitValue(new TransitionResult<>(uuidOfRequest,
+							"No matching transition found from " + currentState + " triggered by " + eventOfRequest,
+							Boolean.FALSE, eventOfRequest, null, null, null));
 					continue;
 				}
 
 				// If being closed now, just return the result now
 				if (isBeingClosed.get()) {
 					resultSinkOfRequest.tryEmitValue(
-							new TransitionResult<>(uuidOfRequest, eventOfRequest, null, null, null, Boolean.FALSE,
-									"Being closed now, so not possible to process the event: " + eventOfRequest));
+							new TransitionResult<>(uuidOfRequest,
+									"Being closed now, so not possible to process the event: " + eventOfRequest,
+									Boolean.FALSE, eventOfRequest, null, null, null));
 					continue;
 				}
 
@@ -132,7 +136,7 @@ public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> im
 		});
 
 		this.currentState = initialState;
-		stateSink.tryEmitNext(new StateChange<>(AsyncerUtil.generateType1UUID(), initialState));
+		stateSink.tryEmitNext(new Change<>(AsyncerUtil.generateType1UUID(), "", initialState));
 
 	}
 
@@ -144,9 +148,8 @@ public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> im
 		try {
 			requests.put(new Request<>(uuid, event, resultSink));
 		} catch (InterruptedException e) {
-			TransitionResult<S, T, E, F, Boolean> transitionResult = new TransitionResult<>(uuid, event, null, null,
-					null,
-					Boolean.FALSE, "Failed to fire the event: " + event);
+			TransitionResult<S, T, E, F, Boolean> transitionResult = new TransitionResult<>(uuid,
+					"Failed to fire the event: " + event, Boolean.FALSE, event, null, null, null);
 			resultSink.tryEmitValue(transitionResult);
 			transitionResultSink.tryEmitNext(transitionResult);
 		}
@@ -156,12 +159,12 @@ public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> im
 	}
 
 	@Override
-	public Flux<StateChange<S>> stateChange() {
+	public Flux<Change<S>> state() {
 		return stateSink.asFlux();
 	}
 
 	@Override
-	public Flux<TransitionResult<S, T, E, F, Boolean>> transitionResult() {
+	public Flux<TransitionResult<S, T, E, F, Boolean>> transition() {
 		return transitionResultSink.asFlux();
 	}
 
