@@ -22,6 +22,10 @@ import reactor.util.concurrent.Queues;
 
 public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> implements Asyncer<S, T, E, F, Boolean> {
 
+	public record Request<S extends State<T>, T, E extends Event<F>, F>(UUID uuid, E event,
+			One<TransitionResult<S, T, E, F, Boolean>> resultSink) {
+	}
+
 	private final UUID uuid = AsyncerUtil.generateType1UUID();
 
 	@NonNull
@@ -84,7 +88,7 @@ public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> im
 
 				if (finalState != null && currentState.equals(finalState)) {
 					resultSinkOfRequest.tryEmitValue(
-							new TransitionResult<>(uuidOfRequest, eventOfRequest + " is a final state", Boolean.FALSE,
+							new TransitionResult<>(uuidOfRequest, Boolean.FALSE, eventOfRequest + " is a final state",
 									eventOfRequest, null, null, null));
 					continue;
 				}
@@ -94,18 +98,18 @@ public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> im
 								&& t.getEvent().getType().equals(eventOfRequest.getType()))
 						.findFirst();
 				if (!matchingTransition.isPresent()) {
-					resultSinkOfRequest.tryEmitValue(new TransitionResult<>(uuidOfRequest,
+					resultSinkOfRequest.tryEmitValue(new TransitionResult<>(uuidOfRequest, Boolean.FALSE,
 							"No matching transition found from " + currentState + " triggered by " + eventOfRequest,
-							Boolean.FALSE, eventOfRequest, null, null, null));
+							eventOfRequest, null, null, null));
 					continue;
 				}
 
 				// If being closed now, just return the result now
 				if (isBeingClosed.get()) {
 					resultSinkOfRequest.tryEmitValue(
-							new TransitionResult<>(uuidOfRequest,
+							new TransitionResult<>(uuidOfRequest, Boolean.FALSE,
 									"Being closed now, so not possible to process the event: " + eventOfRequest,
-									Boolean.FALSE, eventOfRequest, null, null, null));
+									eventOfRequest, null, null, null));
 					continue;
 				}
 
@@ -136,7 +140,7 @@ public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> im
 		});
 
 		this.currentState = initialState;
-		stateSink.tryEmitNext(new Change<>(AsyncerUtil.generateType1UUID(), "", initialState));
+		stateSink.tryEmitNext(new Change<>(AsyncerUtil.generateType1UUID(), initialState));
 
 	}
 
@@ -148,8 +152,8 @@ public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> im
 		try {
 			requests.put(new Request<>(uuid, event, resultSink));
 		} catch (InterruptedException e) {
-			TransitionResult<S, T, E, F, Boolean> transitionResult = new TransitionResult<>(uuid,
-					"Failed to fire the event: " + event, Boolean.FALSE, event, null, null, null);
+			TransitionResult<S, T, E, F, Boolean> transitionResult = new TransitionResult<>(uuid, Boolean.FALSE,
+					"Failed to fire the event: " + event, event, null, null, null);
 			resultSink.tryEmitValue(transitionResult);
 			transitionResultSink.tryEmitNext(transitionResult);
 		}

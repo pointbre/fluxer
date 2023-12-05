@@ -56,11 +56,11 @@ public non-sealed class ParallelFAETaskExecutorImpl<S extends State<T>, T, E ext
 	protected void handleComplete(Subtask<? extends Result<Boolean>> task) {
 		if (task.state() == Subtask.State.FAILED) {
 			System.out.println("FAILED " + task);
-			taskResults.add(new Result<>(AsyncerUtil.generateType1UUID(), "Exception occurred: " + task.exception(),
-					Boolean.FALSE));
+			taskResults.add(new Result<>(AsyncerUtil.generateType1UUID(),
+					Boolean.FALSE, "Exception occurred: " + task.exception()));
 		} else if (task.state() == Subtask.State.UNAVAILABLE) {
 			System.out.println("UNAVAILABLE " + task);
-			taskResults.add(new Result<>(AsyncerUtil.generateType1UUID(), "Not completed after forked", Boolean.FALSE));
+			taskResults.add(new Result<>(AsyncerUtil.generateType1UUID(), Boolean.FALSE, "Not completed after forked"));
 		} else {
 			System.out.println("SUCCESS " + task);
 			taskResults.add(task.get());

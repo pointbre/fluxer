@@ -1,50 +1,48 @@
 package com.github.pointbre.fluxer.core;
 
-import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import org.slf4j.event.Level;
 
 import com.github.pointbre.asyncer.core.Asyncer;
-import com.github.pointbre.asyncer.core.AsyncerUtil;
+import com.github.pointbre.asyncer.core.Asyncer.Change;
+import com.github.pointbre.asyncer.core.Asyncer.Result;
+import com.github.pointbre.asyncer.core.Asyncer.Transition;
+import com.github.pointbre.asyncer.core.Asyncer.Typed;
 
 import lombok.EqualsAndHashCode;
 import lombok.NonNull;
+import lombok.ToString;
 import lombok.Value;
+import lombok.experimental.NonFinal;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.annotation.Nullable;
 
-public interface Fluxer<T> extends AutoCloseable {
+public interface Fluxer<M> extends AutoCloseable {
 
 	UUID uuid();
 
-	Flux<Asyncer.Change<State>> state();
+	Flux<Change<State>> state();
 
-	Flux<Asyncer.Change<Link>> link();
+	Flux<Change<Link>> link();
 
-	Flux<Asyncer.Change<Message<T>>> message();
+	Flux<Change<Message<M>>> message();
 
-	Flux<Asyncer.Change<Log>> log();
+	Flux<Change<Log>> log();
 
-	Mono<RequestResult> start();
+	Mono<RequestResult<M>> start();
 
-	Mono<RequestResult> stop();
+	Mono<RequestResult<M>> stop();
 
-	Mono<RequestResult> send(T message, EndPoint remote);
-
-	@Value
-	public class RequestResult extends Asyncer.Result<Boolean> {
-
-		@NonNull
-		State.Event event;
-
-	}
+	Mono<RequestResult<M>> send(@NonNull M message, @NonNull EndPoint remote);
 
 	@Value
 	@EqualsAndHashCode(callSuper = true)
 	public class State extends Asyncer.State<State.Type> {
 
+		@ToString
 		public enum Type {
 			STARTING, STARTED, STOPPING, STOPPED
 		}
@@ -53,40 +51,41 @@ public interface Fluxer<T> extends AutoCloseable {
 			super(type);
 		}
 
-		@Override
-		public String toString() {
-			return this.getType().name();
-		}
 	}
 
 	@Value
 	@EqualsAndHashCode(callSuper = true)
-	public class Event extends Asyncer.Event<Event.Type> {
+	public class Event<M> extends Asyncer.Event<Event.Type> {
+
 		public enum Type {
 			START, STOP, SEND;
 		}
 
 		public Event(Type type) {
-			super(type);
+			this(type, null, null);
 		}
 
-		@Override
-		public String toString() {
-			return this.getType().name();
+		public Event(Type type, @Nullable M message, @Nullable EndPoint remote) {
+			super(type);
+			this.message = message;
+			this.remote = remote;
 		}
+
+		@Nullable
+		M message;
+
+		@Nullable
+		EndPoint remote;
+
 	}
 
 	@Value
-	public class Link {
-		public enum State {
+	@EqualsAndHashCode(callSuper = true)
+	public class Link extends Typed<Link.Type> {
+
+		public enum Type {
 			CONNECTED, DISCONNECTED, NONE;
 		}
-
-		/**
-		 * UUID of the state change
-		 */
-		@NonNull
-		UUID uuid;
 
 		/**
 		 * The unique link id
@@ -95,48 +94,38 @@ public interface Fluxer<T> extends AutoCloseable {
 		String id;
 
 		@NonNull
-		State state;
-
-		@NonNull
 		EndPoint local;
 
 		@NonNull
 		EndPoint remote;
 
-		public Link(String id, State state, EndPoint local, EndPoint remote) {
-			this.uuid = AsyncerUtil.generateType1UUID();
+		public Link(@NonNull Type type, @NonNull String id, @NonNull EndPoint local,
+				@NonNull EndPoint remote) {
+			super(type);
 			this.id = id;
-			this.state = state;
 			this.local = local;
 			this.remote = remote;
 		}
+
 	}
 
 	@Value
 	public class EndPoint {
+
 		@NonNull
 		String ipAddress;
 
 		@NonNull
 		Integer port;
 
-		public EndPoint(String ipAddress, Integer port) {
-			this.ipAddress = ipAddress;
-			this.port = port;
-		}
 	}
 
 	@Value
-	public class Message<T> {
+	@EqualsAndHashCode(callSuper = true)
+	public class Message<M> extends Typed<Message.Type> {
 		public enum Type {
 			INBOUND, OUTBOUND;
 		}
-
-		@NonNull
-		UUID uuid;
-
-		@NonNull
-		Type type;
 
 		@NonNull
 		EndPoint local;
@@ -145,28 +134,20 @@ public interface Fluxer<T> extends AutoCloseable {
 		EndPoint remote;
 
 		@NonNull
-		T message;
+		M message;
 
-		public static <T> Message<T> of(Type type, EndPoint local, EndPoint remote, T message) {
-			return new Message<>(type, local, remote, message);
-		}
-
-		private Message(Type type, EndPoint local, EndPoint remote, T message) {
-			this.uuid = AsyncerUtil.generateType1UUID();
-			this.type = type;
+		public Message(@NonNull Type type, @NonNull EndPoint local, @NonNull EndPoint remote, @NonNull M message) {
+			super(type);
 			this.local = local;
 			this.remote = remote;
 			this.message = message;
 		}
+
 	}
 
 	@Value
-	public class Log {
-		@NonNull
-		UUID uuid;
-
-		@NonNull
-		LocalDateTime dateTime;
+	@EqualsAndHashCode(callSuper = true)
+	public class Log extends Typed<Level> {
 
 		@NonNull
 		Level level;
@@ -177,16 +158,28 @@ public interface Fluxer<T> extends AutoCloseable {
 		@Nullable
 		Throwable throwable;
 
-		public Log(Level level, String log, Throwable throwable) {
-			this.uuid = AsyncerUtil.generateType1UUID();
-			this.dateTime = LocalDateTime.now();
+		public Log(@NonNull Level type, @NonNull Level level, @NonNull String description,
+				@Nullable Throwable throwable) {
+			super(type);
 			this.level = level;
-			this.description = log;
+			this.description = description;
 			this.throwable = throwable;
 		}
 
-		public Log(Level level, String log) {
-			this(level, log, null);
-		}
 	}
+
+	@Value
+	@NonFinal
+	@EqualsAndHashCode(callSuper = true)
+	public class RequestResult<M> extends Asyncer.TransitionResult<State, State.Type, Event<M>, Event.Type, Boolean> {
+
+		public RequestResult(@NonNull UUID uuid, @NonNull Boolean value, @NonNull String description,
+				@NonNull Event<M> event, List<State> states,
+				Transition<State, State.Type, Event<M>, Event.Type, Boolean> transition,
+				List<Result<Boolean>> taskResults) {
+			super(uuid, value, description, event, states, transition, taskResults);
+		}
+
+	}
+
 }

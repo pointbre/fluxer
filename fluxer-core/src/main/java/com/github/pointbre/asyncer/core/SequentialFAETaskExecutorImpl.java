@@ -54,15 +54,14 @@ public non-sealed class SequentialFAETaskExecutorImpl<S extends State<T>, T, E e
 				}
 
 				if (isTimedOut) {
-					taskResults.add(new Result<>(AsyncerUtil.generateType1UUID(), "Task execution timed out: " + task,
-							Boolean.FALSE));
+					taskResults.add(new Result<>(AsyncerUtil.generateType1UUID(), Boolean.FALSE,
+							"Task execution timed out: " + task));
 				} else {
 					try {
 						taskResults.add(scope.result());
 					} catch (Exception e) {
-						taskResults.add(new Result<>(AsyncerUtil.generateType1UUID(),
-								"Failed to get the result of the task " + task + " : " + e.getLocalizedMessage(),
-								Boolean.FALSE));
+						taskResults.add(new Result<>(AsyncerUtil.generateType1UUID(), Boolean.FALSE,
+								"Failed to get the result of the task " + task + " : " + e.getLocalizedMessage()));
 					}
 				}
 			}

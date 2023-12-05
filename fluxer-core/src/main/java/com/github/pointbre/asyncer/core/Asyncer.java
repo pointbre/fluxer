@@ -15,7 +15,6 @@ import lombok.experimental.NonFinal;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks.Many;
-import reactor.core.publisher.Sinks.One;
 import reactor.util.annotation.Nullable;
 
 public interface Asyncer<S extends State<T>, T, E extends Event<F>, F, R> extends AutoCloseable {
@@ -44,8 +43,21 @@ public interface Asyncer<S extends State<T>, T, E extends Event<F>, F, R> extend
 		@NonNull
 		UUID uuid;
 
+	}
+
+	@Value
+	@NonFinal
+	@EqualsAndHashCode(callSuper = true)
+	public class Change<C> extends Unique {
+
 		@NonNull
-		String description;
+		C value;
+
+		public Change(@NonNull UUID uuid, @NonNull C value) {
+			super(uuid);
+			this.value = value;
+		}
+
 	}
 
 	@Value
@@ -53,15 +65,18 @@ public interface Asyncer<S extends State<T>, T, E extends Event<F>, F, R> extend
 	@EqualsAndHashCode(callSuper = true)
 	public class State<T> extends Typed<T> {
 
-		public State(T type) {
+		public State(@NonNull T type) {
 			super(type);
 		}
 
 	}
 
+	@Value
+	@NonFinal
+	@EqualsAndHashCode(callSuper = true)
 	public class Event<T> extends Typed<T> {
 
-		protected Event(T type) {
+		protected Event(@NonNull T type) {
 			super(type);
 		}
 
@@ -98,25 +113,6 @@ public interface Asyncer<S extends State<T>, T, E extends Event<F>, F, R> extend
 		S toWhenFailed;
 	}
 
-	public record Request<S extends State<T>, T, E extends Event<F>, F>(UUID uuid, E event,
-			One<TransitionResult<S, T, E, F, Boolean>> resultSink) {
-	}
-
-	@Value
-	@NonFinal
-	@EqualsAndHashCode(callSuper = true)
-	public class Change<C> extends Unique {
-
-		@NonNull
-		C value;
-
-		public Change(@NonNull UUID uuid, @NonNull String description, @NonNull C value) {
-			super(uuid, description);
-			this.value = value;
-		}
-
-	}
-
 	@Value
 	@NonFinal
 	@EqualsAndHashCode(callSuper = true)
@@ -125,9 +121,13 @@ public interface Asyncer<S extends State<T>, T, E extends Event<F>, F, R> extend
 		@NonNull
 		R value;
 
-		public Result(@NonNull UUID uuid, @NonNull String description, @NonNull R value) {
-			super(uuid, description);
+		@NonNull
+		String description;
+
+		public Result(@NonNull UUID uuid, @NonNull R value, @NonNull String description) {
+			super(uuid);
 			this.value = value;
+			this.description = description;
 		}
 
 	}
@@ -149,15 +149,15 @@ public interface Asyncer<S extends State<T>, T, E extends Event<F>, F, R> extend
 		@Nullable
 		List<Result<R>> taskResults;
 
-		public TransitionResult(@NonNull UUID uuid, @NonNull String description, @NonNull R value, @NonNull E event,
-				List<S> states, Transition<S, T, E, F, R> transition, List<Result<R>> taskResults) {
-			super(uuid, description, value);
+		public TransitionResult(@NonNull UUID uuid, @NonNull R value, @NonNull String description, @NonNull E event,
+				@Nullable List<S> states, @Nullable Transition<S, T, E, F, R> transition,
+				@Nullable List<Result<R>> taskResults) {
+			super(uuid, value, description);
 			this.event = event;
 			this.states = states;
 			this.transition = transition;
 			this.taskResults = taskResults;
 		}
-
 	}
 
 	public sealed interface TransitionExecutor<S extends State<T>, T, E extends Event<F>, F, R>

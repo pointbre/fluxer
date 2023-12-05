@@ -84,7 +84,7 @@ class AsyncerTest {
 				Arrays.asList(
 						(state, event) -> {
 							System.out.println("inside of task: state=" + state + ", event=" + event);
-							return new Result<>(AsyncerUtil.generateType1UUID(), "done", Boolean.TRUE);
+							return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE, "done");
 						}));
 
 		Transition<TestState, TestState.Type, TestEvent, TestEvent.Type, Boolean> stoppedToStartingAndThenStartedOrStopped = new Transition<>(
