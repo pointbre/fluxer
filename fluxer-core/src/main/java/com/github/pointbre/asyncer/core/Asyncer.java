@@ -161,7 +161,7 @@ public interface Asyncer<S extends State<T>, T, E extends Event<F>, F, R> extend
 	}
 
 	public sealed interface TransitionExecutor<S extends State<T>, T, E extends Event<F>, F, R>
-			extends AutoCloseable permits DefaultTransitionExecutorImpl {
+			permits DefaultTransitionExecutorImpl {
 
 		public TransitionResult<S, T, E, F, R> run(@NonNull UUID uuid,
 				@NonNull S state, @NonNull E event,

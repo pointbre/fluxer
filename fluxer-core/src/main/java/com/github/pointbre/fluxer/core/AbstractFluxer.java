@@ -12,52 +12,65 @@ import java.util.UUID;
 import org.slf4j.event.Level;
 
 import com.github.pointbre.asyncer.core.Asyncer;
+import com.github.pointbre.asyncer.core.Asyncer.Change;
+import com.github.pointbre.asyncer.core.Asyncer.Result;
 import com.github.pointbre.asyncer.core.Asyncer.Transition;
-import com.github.pointbre.asyncer.core.Asyncer.TransitionExecutor;
 import com.github.pointbre.asyncer.core.AsyncerUtil;
 import com.github.pointbre.asyncer.core.DefaultAsyncerImpl;
 import com.github.pointbre.asyncer.core.DefaultTransitionExecutorImpl;
 import com.github.pointbre.asyncer.core.SequentialFAETaskExecutorImpl;
 
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.core.publisher.Sinks.Many;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.concurrent.Queues;
 
 @Slf4j
-public abstract class AbstractFluxer<T> implements Fluxer<T> {
+public abstract class AbstractFluxer<M> implements Fluxer<M> {
 
 	private final UUID uuid = AsyncerUtil.generateType1UUID();
 
-	private Many<State> stateSink;
-	private Many<Link> linkSink;
-	private Many<Message<T>> messageSink;
-	private Many<Log> logSink;
+	private Many<Change<State>> stateSink;
+	private Many<Change<Link>> linkSink;
+	private Many<Change<Message<M>>> messageSink;
+	private Many<Change<Log>> logSink;
 
-	private Flux<State> stateFlux;
-	private Flux<Link> linkFlux;
-	private Flux<Message<T>> messageFlux;
-	private Flux<Log> logFlux;
+	private Flux<Change<State>> stateFlux;
+	private Flux<Change<Link>> linkFlux;
+	private Flux<Change<Message<M>>> messageFlux;
+	private Flux<Change<Log>> logFlux;
 
-	protected Asyncer<State, State.Type, State.Event, Boolean> asyncer;
+	protected Asyncer<State, State.Type, Event<M>, Event.Type, Boolean> asyncer;
+
+	protected final State STARTING = new State(State.Type.STARTING);
+	protected final State STARTED = new State(State.Type.STARTED);
+	protected final State STOPPING = new State(State.Type.STOPPING);
+	protected final State STOPPED = new State(State.Type.STOPPED);
+
+	protected final Event<M> START = new Event<>(Event.Type.START);
+	protected final Event<M> STOP = new Event<>(Event.Type.STOP);
+	protected final Event<M> SEND = new Event<>(Event.Type.SEND);
 
 	protected AbstractFluxer() throws Exception {
 
 		stateSink = Sinks
 				.many()
-				.multicast().<State>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
+				.multicast().<Change<State>>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
 		linkSink = Sinks
 				.many()
-				.multicast().<Link>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
+				.multicast().<Change<Link>>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
 		messageSink = Sinks
 				.many()
-				.multicast().<Message<T>>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
+				.multicast().<Change<Message<M>>>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
 		logSink = Sinks
 				.many()
-				.multicast().<Log>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
+				.multicast().<Change<Log>>onBackpressureBuffer(Queues.SMALL_BUFFER_SIZE, false);
 
+		// FIXME Use virtual thread?
 		stateFlux = stateSink
 				.asFlux()
 				.publishOn(Schedulers.boundedElastic())
@@ -89,12 +102,33 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 
 		emitLog(Level.INFO, "Starting the internal state machine");
 		asyncer = createAsyncer();
-
 		asyncer.state()
-				.subscribe(state -> {
-					emitLog(Level.INFO, "The state of the internal state machine has changed: " + state);
-					stateSink.tryEmitNext(new State(asyncer.uuid(), state.getValue(), null));
+				.subscribe(stateChange -> {
+					emitLog(Level.INFO, "The state of the internal state machine has changed: " + stateChange);
+					stateSink.tryEmitNext(stateChange);
 				});
+	}
+
+	private Asyncer<State, State.Type, Event<M>, Event.Type, Boolean> createAsyncer() {
+
+		var startWhenStopped = new Transition<>("Start when stopped",
+				STOPPED, START, STARTING, new ArrayList<>(Arrays.asList(this::processStartRequest)),
+				new SequentialFAETaskExecutorImpl<>(), null, STARTED, STOPPED);
+
+		var stopWhenStarted = new Transition<>("Stop when started",
+				STARTED, STOP, STOPPING, new ArrayList<>(Arrays.asList(this::processStopRequest)),
+				new SequentialFAETaskExecutorImpl<>(), null, STOPPED, STOPPED);
+
+		var sendWhenStarted = new Transition<>("", STARTED, SEND, null,
+				new ArrayList<>(Arrays.asList(this::processSendRequest)), new SequentialFAETaskExecutorImpl<>(), null,
+				null, null);
+
+		Set<Transition<State, State.Type, Event<M>, Event.Type, Boolean>> transitions = new HashSet<>();
+		transitions.add(startWhenStopped);
+		transitions.add(stopWhenStarted);
+		transitions.add(sendWhenStarted);
+
+		return new DefaultAsyncerImpl<>(STOPPED, null, transitions, new DefaultTransitionExecutorImpl<>());
 	}
 
 	@Override
@@ -103,29 +137,57 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 	}
 
 	@Override
-	public Flux<State> state() {
+	public Flux<Change<State>> state() {
 		return stateFlux;
 	}
 
 	@Override
-	public Flux<Link> link() {
+	public Flux<Change<Link>> link() {
 		return linkFlux;
 	}
 
 	@Override
-	public Flux<Message<T>> message() {
+	public Flux<Change<Message<M>>> message() {
 		return messageFlux;
 	}
 
 	@Override
-	public Flux<Log> log() {
+	public Flux<Change<Log>> log() {
 		return logFlux;
+	}
+
+	@Override
+	public Mono<RequestResult<M>> start() {
+		return triggerEvent(START);
+	}
+
+	@Override
+	public Mono<RequestResult<M>> stop() {
+		return triggerEvent(STOP);
+	}
+
+	@Override
+	public Mono<RequestResult<M>> send(@NonNull M message, @NonNull EndPoint remote) {
+		return triggerEvent(new Event<>(Event.Type.SEND, message, remote));
+	}
+
+	private Mono<RequestResult<M>> triggerEvent(Event<M> event) {
+		final Sinks.One<RequestResult<M>> resultSink = Sinks.one();
+
+		asyncer.fire(AsyncerUtil.generateType1UUID(), event)
+				.subscribe(transitionResult -> {
+					emitLog(Level.INFO, event + " request processing result: " + transitionResult);
+					resultSink.tryEmitValue(new RequestResult<>(transitionResult));
+				});
+
+		return resultSink.asMono();
 	}
 
 	@Override
 	public void close() throws Exception {
 
-		processStopRequest();
+		emitLog(Level.INFO, "Sending STOP");
+		asyncer.fire(AsyncerUtil.generateType1UUID(), STOP).block();
 
 		emitLog(Level.INFO, "Closing the internal state machine");
 		asyncer.close();
@@ -134,45 +196,54 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 			emitLog(Level.INFO, "Closing state flux");
 			stateSink.tryEmitComplete();
 		}
+
 		if (linkSink != null) {
 			emitLog(Level.INFO, "Closing link flux");
 			linkSink.tryEmitComplete();
 		}
+
 		if (messageSink != null) {
 			emitLog(Level.INFO, "Closing message flux");
 			messageSink.tryEmitComplete();
 		}
+
 		if (logSink != null) {
 			emitLog(Level.INFO, "Closing log flux");
 			logSink.tryEmitComplete();
 		}
 	}
 
-	protected abstract Result<Boolean> processStartRequest();
+	protected abstract Result<Boolean> processStartRequest(State state, Event<M> event);
 
-	protected abstract Result<Boolean> processStopRequest();
+	protected abstract Result<Boolean> processStopRequest(State state, Event<M> event);
 
-	protected abstract Result<Boolean> processSendRequest();
+	protected abstract Result<Boolean> processSendRequest(State state, Event<M> event);
 
-	protected Many<Link> getLinkSink() {
+	protected Many<Change<Link>> getLinkSink() {
 		return linkSink;
 	}
 
-	protected Many<Message<T>> getMessageSink() {
+	protected Many<Change<Message<M>>> getMessageSink() {
 		return messageSink;
 	}
 
-	protected Many<Log> getLogSink() {
+	protected Many<Change<Log>> getLogSink() {
 		return logSink;
 	}
 
-	protected void emitLink(String id, Link.State state, EndPoint local, EndPoint remote) {
-		getLinkSink().tryEmitNext(new Link(id, state, local, remote));
+	protected void emitLink(@NonNull Link.Type type, @NonNull String id, @NonNull EndPoint local,
+			@NonNull EndPoint remote) {
+		linkSink.tryEmitNext(new Change<>(AsyncerUtil.generateType1UUID(), new Link(type, id, local, remote)));
 	}
 
-	protected void emitMessage(Message.Type type, EndPoint local, EndPoint remote,
-			T receivedMessage) {
-		getMessageSink().tryEmitNext(Message.<T>of(type, local, remote, receivedMessage));
+	protected void emitMessage(@NonNull Message.Type type, @NonNull EndPoint local, @NonNull EndPoint remote,
+			@NonNull M receivedMessage) {
+		messageSink.tryEmitNext(
+				new Change<>(AsyncerUtil.generateType1UUID(), new Message<>(type, local, remote, receivedMessage)));
+	}
+
+	protected void emitLog(Level level, String description) {
+		emitLog(level, description, null);
 	}
 
 	protected void emitLog(Level level, String description, Throwable throwable) {
@@ -195,41 +266,7 @@ public abstract class AbstractFluxer<T> implements Fluxer<T> {
 			default:
 				break;
 		}
-		getLogSink().tryEmitNext(new Log(level, description, throwable));
-	}
-
-	protected void emitLog(Level level, String description) {
-		emitLog(level, description, null);
-	}
-
-	private Asyncer<State.Type, State.Event, Boolean> createAsyncer() {
-
-		var startWhenStopped = new Transition<State.Type, State.Event, Boolean>("", State.Type.STOPPED,
-				State.Event.START, State.Type.STARTING, new ArrayList<>(Arrays.asList(
-						this::processStartRequest)),
-				SequentialFAETaskExecutorImpl.class, null,
-				State.Type.STARTED, State.Type.STOPPED);
-
-		var stopWhenStarted = new Transition<State.Type, State.Event, Boolean>("", State.Type.STARTED,
-				State.Event.STOP, State.Type.STOPPING, new ArrayList<>(Arrays.asList(
-						this::processStopRequest)),
-				SequentialFAETaskExecutorImpl.class, null,
-				State.Type.STOPPED, State.Type.STOPPED);
-
-		var sendWhenStarted = new Transition<State.Type, State.Event, Boolean>("",
-				State.Type.STARTED, State.Event.SEND,
-				null, new ArrayList<>(Arrays.asList(this::processSendRequest)),
-				SequentialFAETaskExecutorImpl.class, null,
-				null, null);
-
-		Set<Transition<State.Type, State.Event, Boolean>> transitions = new HashSet<>();
-		transitions.add(startWhenStopped);
-		transitions.add(stopWhenStarted);
-		transitions.add(sendWhenStarted);
-
-		TransitionExecutor<State.Type, State.Event, Boolean> transitionExecutor = new DefaultTransitionExecutorImpl<>();
-
-		return new DefaultAsyncerImpl<>(State.Type.STOPPED, null, transitions, transitionExecutor);
+		logSink.tryEmitNext(new Change<>(AsyncerUtil.generateType1UUID(), new Log(level, description, throwable)));
 	}
 
 }

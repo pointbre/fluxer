@@ -81,6 +81,7 @@ public non-sealed class SequentialFAETaskExecutorImpl<S extends State<T>, T, E e
 				try {
 					scope.close();
 				} catch (Exception e) {
+					//
 				}
 			}
 		});

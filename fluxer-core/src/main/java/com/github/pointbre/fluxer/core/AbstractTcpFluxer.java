@@ -12,10 +12,10 @@ import java.util.stream.Collectors;
 import org.reactivestreams.Publisher;
 import org.slf4j.event.Level;
 
+import com.github.pointbre.asyncer.core.Asyncer.Result;
+import com.github.pointbre.asyncer.core.Asyncer.TaskExecutor;
 import com.github.pointbre.asyncer.core.AsyncerUtil;
 import com.github.pointbre.asyncer.core.SequentialFAETaskExecutorImpl;
-import com.github.pointbre.asyncer.core.TaskExecutor;
-import com.github.pointbre.fluxer.core.Fluxer.RequestResult;
 
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -63,68 +63,19 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 		this.port = port;
 	}
 
-	@Override
-	public Mono<RequestResult> start() {
-		return triggerEvent(State.Event.START);
-	}
+	// @Override
+	// public Mono<RequestResult> start() {
+	// return triggerEvent(State.Event.START);
+	// }
 
-	@Override
-	public Mono<RequestResult> stop() {
-		return triggerEvent(State.Event.STOP);
-	}
+	// @Override
+	// public Mono<RequestResult> stop() {
+	// return triggerEvent(State.Event.STOP);
+	// }
 
 	@Override
 	public Mono<RequestResult> send(byte[] message, EndPoint remote) {
-		Sinks.One<RequestResult> resultSink = Sinks.one();
 
-		// TODO Should check if the current state is STARTED???
-		// TODO Can I use asyncer for this? Hmm, not sure how to pass arguments
-		if (channelGroup != null) {
-			Iterator<Channel> channelIterator = channelGroup.iterator();
-			boolean linkFound = false;
-			Channel channelToCheck = null;
-			while (channelIterator.hasNext()) {
-				channelToCheck = channelIterator.next();
-				if (isSameLink(channelToCheck, remote)) {
-					linkFound = true;
-					break;
-				}
-			}
-			final Channel channelFound;
-			if (!linkFound) {
-				channelFound = null;
-			} else {
-				channelFound = channelToCheck;
-			}
-			if (channelFound != null) {
-				final InetSocketAddress localAddress = (InetSocketAddress) channelFound.localAddress();
-				final EndPoint local = new EndPoint(localAddress.getAddress().getHostAddress(), localAddress.getPort());
-				channelFound.writeAndFlush(Unpooled.wrappedBuffer(message))
-						.addListener(new ChannelFutureListener() {
-							@Override
-							public void operationComplete(ChannelFuture future) throws Exception {
-								String log = "Successfully sent to " + remote + ":" + ByteBufUtil.hexDump(message);
-								resultSink.tryEmitValue(
-										new RequestResult(AsyncerUtil.generateType1UUID(), State.Event.SEND,
-												Boolean.TRUE, log));
-								emitMessage(Message.Type.OUTBOUND, local, remote, message);
-								emitLog(Level.INFO, log);
-							}
-						});
-			} else {
-				String log = "Failed to send a message as matching link is not found: " + remote;
-				resultSink.tryEmitValue(
-						new RequestResult(AsyncerUtil.generateType1UUID(), State.Event.SEND, Boolean.FALSE, log));
-				emitLog(Level.ERROR, log);
-			}
-		} else {
-			String log = "Failed to send a message as no link is not found: " + remote;
-			resultSink.tryEmitValue(
-					new RequestResult(AsyncerUtil.generateType1UUID(), State.Event.SEND, Boolean.FALSE, log));
-			emitLog(Level.ERROR, log);
-		}
-
-		return resultSink.asMono();
 	}
 
 	@Override
@@ -139,7 +90,8 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 
 	protected abstract Result<Boolean> createTcpConnection();
 
-	protected Result<Boolean> processStartRequest() {
+	@Override
+	protected Result<Boolean> processStartRequest(State state, Event<byte[]> event) {
 
 		System.out.println("Running processStartRequest");
 
@@ -160,7 +112,8 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 		return runTasks(tasksToExecute);
 	}
 
-	protected Result<Boolean> processStopRequest() {
+	@Override
+	protected Result<Boolean> processStopRequest(State state, Event<byte[]> event) {
 		System.out.println("Running processStopRequest");
 		List<Callable<Result<Boolean>>> tasksToExecute = new ArrayList<>();
 		tasksToExecute.add(() -> {
@@ -185,22 +138,6 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 			if (channelGroup != null) {
 				var future = channelGroup.disconnect();
 				future.await();
-				// final CountDownLatch countDownLatch = new CountDownLatch(1);
-				// try {
-				// channelGroup.disconnect().addListener(new ChannelGroupFutureListener() {
-				// @Override
-				// public void operationComplete(ChannelGroupFuture future) throws Exception {
-				// countDownLatch.countDown();
-				// }
-				// });
-				// try {
-				// countDownLatch.await(MAX_WAIT, TimeUnit.SECONDS);
-				// } catch (InterruptedException e) {
-				// }
-				// } catch (Exception e) {
-				// // TODO Auto-generated catch block
-				// e.printStackTrace();
-				// }
 				emitLog(Level.INFO, "Disconnected the channel group");
 			} else {
 				emitLog(Level.INFO, "No need of disconnecting group as it's null");
@@ -255,20 +192,66 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 		return runTasks(tasksToExecute);
 	}
 
-	private Mono<RequestResult> triggerEvent(State.Event event) {
-		final Sinks.One<RequestResult> resultSink = Sinks.one();
-		asyncer.fire(AsyncerUtil.generateType1UUID(), event)
-				.subscribe(transitionResult -> {
-					emitLog(Level.INFO, event + " request processing result: " + transitionResult);
-					resultSink.tryEmitValue(new RequestResult(transitionResult.getUuid(), transitionResult.getEvent(),
-							transitionResult.getValue(), transitionResult.getDescription()));
-				});
+	@Override
+	protected Result<Boolean> processSendRequest(State state, Event<byte[]> event) {
+		// TODO Auto-generated method stub
+
+		Sinks.One<RequestResult> resultSink = Sinks.one();
+
+		// TODO Should check if the current state is STARTED???
+		// TODO Can I use asyncer for this? Hmm, not sure how to pass arguments
+		if (channelGroup != null) {
+			Iterator<Channel> channelIterator = channelGroup.iterator();
+			boolean linkFound = false;
+			Channel channelToCheck = null;
+			while (channelIterator.hasNext()) {
+				channelToCheck = channelIterator.next();
+				if (isSameLink(channelToCheck, remote)) {
+					linkFound = true;
+					break;
+				}
+			}
+			final Channel channelFound;
+			if (!linkFound) {
+				channelFound = null;
+			} else {
+				channelFound = channelToCheck;
+			}
+			if (channelFound != null) {
+				final InetSocketAddress localAddress = (InetSocketAddress) channelFound.localAddress();
+				final EndPoint local = new EndPoint(localAddress.getAddress().getHostAddress(), localAddress.getPort());
+				channelFound.writeAndFlush(Unpooled.wrappedBuffer(message))
+						.addListener(new ChannelFutureListener() {
+							@Override
+							public void operationComplete(ChannelFuture future) throws Exception {
+								String log = "Successfully sent to " + remote + ":" + ByteBufUtil.hexDump(message);
+								resultSink.tryEmitValue(
+										new RequestResult(AsyncerUtil.generateType1UUID(), State.Event.SEND,
+												Boolean.TRUE, log));
+								emitMessage(Message.Type.OUTBOUND, local, remote, message);
+								emitLog(Level.INFO, log);
+							}
+						});
+			} else {
+				String log = "Failed to send a message as matching link is not found: " + remote;
+				resultSink.tryEmitValue(
+						new RequestResult(AsyncerUtil.generateType1UUID(), State.Event.SEND, Boolean.FALSE, log));
+				emitLog(Level.ERROR, log);
+			}
+		} else {
+			String log = "Failed to send a message as no link is not found: " + remote;
+			resultSink.tryEmitValue(
+					new RequestResult(AsyncerUtil.generateType1UUID(), State.Event.SEND, Boolean.FALSE, log));
+			emitLog(Level.ERROR, log);
+		}
 
 		return resultSink.asMono();
+
+		return null;
 	}
 
 	private Result<Boolean> runTasks(List<Callable<Result<Boolean>>> tasksToExecute) {
-		TaskExecutor<Boolean> taskExecutor = new SequentialFAETaskExecutorImpl();
+		TaskExecutor<Boolean> taskExecutor = new SequentialFAETaskExecutorImpl<>();
 		try {
 			List<Result<Boolean>> taskResults = taskExecutor.run(tasksToExecute, Duration.ofSeconds(5));
 			boolean allSuccessfullyDone = taskResults.stream().allMatch(tr -> tr.getValue().booleanValue())

@@ -8,7 +8,6 @@ import com.github.pointbre.asyncer.core.Asyncer.Change;
 import com.github.pointbre.asyncer.core.Asyncer.Event;
 import com.github.pointbre.asyncer.core.Asyncer.Result;
 import com.github.pointbre.asyncer.core.Asyncer.State;
-import com.github.pointbre.asyncer.core.Asyncer.TaskExecutor;
 import com.github.pointbre.asyncer.core.Asyncer.Transition;
 import com.github.pointbre.asyncer.core.Asyncer.TransitionExecutor;
 import com.github.pointbre.asyncer.core.Asyncer.TransitionResult;
@@ -18,8 +17,6 @@ import reactor.core.publisher.Sinks.Many;
 
 public non-sealed class DefaultTransitionExecutorImpl<S extends State<T>, T, E extends Event<F>, F>
 		implements TransitionExecutor<S, T, E, F, Boolean> {
-
-	private TaskExecutor<S, T, E, F, Boolean> taskExecutor = null;
 
 	@Override
 	public TransitionResult<S, T, E, F, Boolean> run(@NonNull UUID uuid, @NonNull S state, @NonNull E event,
@@ -64,14 +61,5 @@ public non-sealed class DefaultTransitionExecutorImpl<S extends State<T>, T, E e
 
 		return new TransitionResult<>(uuid, Boolean.TRUE, "Successfully executed the transition", event, states,
 				transition, taskResults);
-	}
-
-	@Override
-	public void close() throws Exception {
-
-		if (taskExecutor != null) {
-			taskExecutor.close();
-		}
-
 	}
 }

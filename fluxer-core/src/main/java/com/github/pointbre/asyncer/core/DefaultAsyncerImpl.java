@@ -105,13 +105,13 @@ public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> im
 				}
 
 				// If being closed now, just return the result now
-				if (isBeingClosed.get()) {
-					resultSinkOfRequest.tryEmitValue(
-							new TransitionResult<>(uuidOfRequest, Boolean.FALSE,
-									"Being closed now, so not possible to process the event: " + eventOfRequest,
-									eventOfRequest, null, null, null));
-					continue;
-				}
+				// if (isBeingClosed.get()) {
+				// 	resultSinkOfRequest.tryEmitValue(
+				// 			new TransitionResult<>(uuidOfRequest, Boolean.FALSE,
+				// 					"Being closed now, so not possible to process the event: " + eventOfRequest,
+				// 					eventOfRequest, null, null, null));
+				// 	continue;
+				// }
 
 				System.out.println("Running");
 				final Transition<S, T, E, F, Boolean> transition = matchingTransition.get();
@@ -179,10 +179,9 @@ public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> im
 
 	@Override
 	public void close() throws Exception {
-		// FIXME If close() is called again, this will do infinite loop
-
 		System.out.println("Asyncer's close() called");
 
+		// Only the first execution is processed as we need to wait until all of requests are processed
 		if (!isBeingClosed.get()) {
 			stateSink.tryEmitComplete();
 			transitionResultSink.tryEmitComplete();

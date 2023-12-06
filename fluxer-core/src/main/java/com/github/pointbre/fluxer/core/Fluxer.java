@@ -9,6 +9,7 @@ import com.github.pointbre.asyncer.core.Asyncer;
 import com.github.pointbre.asyncer.core.Asyncer.Change;
 import com.github.pointbre.asyncer.core.Asyncer.Result;
 import com.github.pointbre.asyncer.core.Asyncer.Transition;
+import com.github.pointbre.asyncer.core.Asyncer.TransitionResult;
 import com.github.pointbre.asyncer.core.Asyncer.Typed;
 
 import lombok.EqualsAndHashCode;
@@ -150,18 +151,13 @@ public interface Fluxer<M> extends AutoCloseable {
 	public class Log extends Typed<Level> {
 
 		@NonNull
-		Level level;
-
-		@NonNull
 		String description;
 
 		@Nullable
 		Throwable throwable;
 
-		public Log(@NonNull Level type, @NonNull Level level, @NonNull String description,
-				@Nullable Throwable throwable) {
-			super(type);
-			this.level = level;
+		public Log(@NonNull Level level, @NonNull String description, @Nullable Throwable throwable) {
+			super(level);
 			this.description = description;
 			this.throwable = throwable;
 		}
@@ -171,15 +167,20 @@ public interface Fluxer<M> extends AutoCloseable {
 	@Value
 	@NonFinal
 	@EqualsAndHashCode(callSuper = true)
-	public class RequestResult<M> extends Asyncer.TransitionResult<State, State.Type, Event<M>, Event.Type, Boolean> {
+	public class RequestResult<M> extends TransitionResult<State, State.Type, Event<M>, Event.Type, Boolean> {
 
 		public RequestResult(@NonNull UUID uuid, @NonNull Boolean value, @NonNull String description,
-				@NonNull Event<M> event, List<State> states,
-				Transition<State, State.Type, Event<M>, Event.Type, Boolean> transition,
-				List<Result<Boolean>> taskResults) {
+				@NonNull Event<M> event, @Nullable List<State> states,
+				@Nullable Transition<State, State.Type, Event<M>, Event.Type, Boolean> transition,
+				@Nullable List<Result<Boolean>> taskResults) {
 			super(uuid, value, description, event, states, transition, taskResults);
 		}
 
+		public RequestResult(TransitionResult<State, State.Type, Event<M>, Event.Type, Boolean> transitionResult) {
+			this(transitionResult.getUuid(), transitionResult.getValue(), transitionResult.getDescription(),
+					transitionResult.getEvent(), transitionResult.getStates(), transitionResult.getTransition(),
+					transitionResult.getTaskResults());
+		}
 	}
 
 }
