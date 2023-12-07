@@ -213,11 +213,11 @@ public abstract class AbstractFluxer<M> implements Fluxer<M> {
 		}
 	}
 
-	protected abstract Result<Boolean> processStartRequest(State state, Event<M> event);
+	protected abstract Result<Boolean> processStartRequest(@NonNull State state, @NonNull Event<M> event);
 
-	protected abstract Result<Boolean> processStopRequest(State state, Event<M> event);
+	protected abstract Result<Boolean> processStopRequest(@NonNull State state, @NonNull Event<M> event);
 
-	protected abstract Result<Boolean> processSendRequest(State state, Event<M> event);
+	protected abstract Result<Boolean> processSendRequest(@NonNull State state, @NonNull Event<M> event);
 
 	protected Many<Change<Link>> getLinkSink() {
 		return linkSink;
@@ -266,6 +266,7 @@ public abstract class AbstractFluxer<M> implements Fluxer<M> {
 			default:
 				break;
 		}
+		System.out.println(description);
 		logSink.tryEmitNext(new Change<>(AsyncerUtil.generateType1UUID(), new Log(level, description, throwable)));
 	}
 

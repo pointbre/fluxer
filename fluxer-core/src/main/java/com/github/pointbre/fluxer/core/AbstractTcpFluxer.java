@@ -5,10 +5,10 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.Callable;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
+import org.apache.commons.codec.binary.Hex;
 import org.reactivestreams.Publisher;
 import org.slf4j.event.Level;
 
@@ -17,17 +17,12 @@ import com.github.pointbre.asyncer.core.Asyncer.TaskExecutor;
 import com.github.pointbre.asyncer.core.AsyncerUtil;
 import com.github.pointbre.asyncer.core.SequentialFAETaskExecutorImpl;
 
-import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.group.ChannelGroup;
 import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.util.concurrent.DefaultEventExecutor;
 import io.netty.util.concurrent.EventExecutor;
-import reactor.core.publisher.Mono;
-import reactor.core.publisher.Sinks;
 import reactor.netty.DisposableChannel;
 import reactor.netty.NettyInbound;
 import reactor.netty.NettyOutbound;
@@ -39,7 +34,7 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 	private final String ipAddress;
 	private final Integer port;
 
-	protected BiFunction<NettyInbound, NettyOutbound, Publisher<Void>> handler;
+	protected BiFunction<NettyInbound, NettyOutbound, Publisher<Void>> tcpConnectionHandler;
 	protected DisposableChannel disposableChannel;
 	protected EventExecutor eventExecutor;
 	protected ChannelGroup channelGroup;
@@ -63,21 +58,6 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 		this.port = port;
 	}
 
-	// @Override
-	// public Mono<RequestResult> start() {
-	// return triggerEvent(State.Event.START);
-	// }
-
-	// @Override
-	// public Mono<RequestResult> stop() {
-	// return triggerEvent(State.Event.STOP);
-	// }
-
-	@Override
-	public Mono<RequestResult> send(byte[] message, EndPoint remote) {
-
-	}
-
 	@Override
 	public String getIpAddress() {
 		return ipAddress;
@@ -91,174 +71,190 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 	protected abstract Result<Boolean> createTcpConnection();
 
 	@Override
-	protected Result<Boolean> processStartRequest(State state, Event<byte[]> event) {
+	protected Result<Boolean> processStartRequest(@NonNull State state, @NonNull Event<byte[]> event) {
 
-		System.out.println("Running processStartRequest");
+		List<BiFunction<State, Event<byte[]>, Result<Boolean>>> tasksToExecute = new ArrayList<>();
 
-		List<Callable<Result<Boolean>>> tasksToExecute = new ArrayList<>();
-		tasksToExecute.add(() -> {
-			handler = createHandler();
+		tasksToExecute.add((s, e) -> {
+			tcpConnectionHandler = createTcpConnectionHandler();
 			eventExecutor = new DefaultEventExecutor();
 			channelGroup = new DefaultChannelGroup(eventExecutor);
-			emitLog(Level.INFO, "Finished creating handler, event executor and channel group");
-			return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
-					"Finished creating handler, event executor and channel group");
-		});
-		tasksToExecute.add(() -> {
-			emitLog(Level.INFO, "Finished creating a tcp connection");
-			return createTcpConnection();
+			return prepareResult(true, "Finished creating handler, event executor and channel group");
 		});
 
-		return runTasks(tasksToExecute);
+		tasksToExecute.add((s, e) -> createTcpConnection());
+
+		return runTasks(state, event, tasksToExecute);
 	}
 
 	@Override
-	protected Result<Boolean> processStopRequest(State state, Event<byte[]> event) {
-		System.out.println("Running processStopRequest");
-		List<Callable<Result<Boolean>>> tasksToExecute = new ArrayList<>();
-		tasksToExecute.add(() -> {
+	protected Result<Boolean> processStopRequest(@NonNull State state, @NonNull Event<byte[]> event) {
+
+		List<BiFunction<State, Event<byte[]>, Result<Boolean>>> tasksToExecute = new ArrayList<>();
+
+		tasksToExecute.add((s, e) -> {
+			String log = "";
 			if (disposableChannel != null) {
 				try {
 					disposableChannel.dispose();
 					disposableChannel.onDispose().block();
-				} catch (Exception e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+				} catch (Exception ex) {
+					//
 				}
-				emitLog(Level.INFO, "Closed the channel");
+				log = "Closed the channel";
 			} else {
-				emitLog(Level.INFO, "No need of closing channel as it's null");
+				log = "No need of closing channel as it's null";
 			}
-
-			return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
-					"Finished closing disposable channel");
+			return prepareResult(true, log);
 		});
 
-		tasksToExecute.add(() -> {
+		tasksToExecute.add((s, e) -> {
+			String log = "";
 			if (channelGroup != null) {
-				var future = channelGroup.disconnect();
-				future.await();
-				emitLog(Level.INFO, "Disconnected the channel group");
+				try {
+					var future = channelGroup.disconnect();
+					future.awaitUninterruptibly();
+				} catch (Exception ex) {
+					//
+				}
+				log = "Disconnected the channel group";
 			} else {
-				emitLog(Level.INFO, "No need of disconnecting group as it's null");
+				log = "No need of disconnecting group as it's null";
 			}
-			return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
-					"Finished disconnecting the channel group");
+			return prepareResult(true, log);
 		});
 
-		tasksToExecute.add(() -> {
+		tasksToExecute.add((s, e) -> {
+			String log = "";
 			if (channelGroup != null) {
 				try {
 					var future = channelGroup.close();
-					future.await();
-				} catch (Exception e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+					future.awaitUninterruptibly();
+				} catch (Exception ex) {
+					//
 				}
-				emitLog(Level.INFO, "Closed the channel group");
+				log = "Closed the channel group";
 			} else {
-				emitLog(Level.INFO, "No need of closing channel as it's null");
+				log = "No need of closing channel as it's null";
 			}
-			return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
-					"Finished closing the channel group");
+			return prepareResult(true, log);
 		});
 
-		tasksToExecute.add(() -> {
+		tasksToExecute.add((s, e) -> {
+			String log = "";
 			if (eventExecutor != null) {
 				try {
 					var future = eventExecutor.shutdownGracefully();
-					future.await();
-				} catch (Exception e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+					future.awaitUninterruptibly();
+				} catch (Exception ex) {
+					//
 				}
-				emitLog(Level.INFO, "Closed the event executor");
+				log = "Closed the event executor";
 			} else {
-				emitLog(Level.INFO, "No need of closing executor as it's null");
+				log = "No need of closing executor as it's null";
 			}
-			return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
-					"Finished creating handler, event executor and channel group");
+			return prepareResult(true, log);
 		});
 
-		tasksToExecute.add(() -> {
+		tasksToExecute.add((s, e) -> {
 			disposableChannel = null;
 			channelGroup = null;
 			eventExecutor = null;
-			emitLog(Level.INFO, "Link related resources are closed");
-			return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.TRUE,
-					"Finished creating handler, event executor and channel group");
+			return prepareResult(true, "Link related resources are reset to null");
 		});
 
-		return runTasks(tasksToExecute);
+		return runTasks(state, event, tasksToExecute);
 	}
 
 	@Override
-	protected Result<Boolean> processSendRequest(State state, Event<byte[]> event) {
-		// TODO Auto-generated method stub
+	protected Result<Boolean> processSendRequest(@NonNull State state, @NonNull Event<byte[]> event) {
 
-		Sinks.One<RequestResult> resultSink = Sinks.one();
+		List<BiFunction<State, Event<byte[]>, Result<Boolean>>> tasksToExecute = new ArrayList<>();
 
-		// TODO Should check if the current state is STARTED???
-		// TODO Can I use asyncer for this? Hmm, not sure how to pass arguments
-		if (channelGroup != null) {
-			Iterator<Channel> channelIterator = channelGroup.iterator();
-			boolean linkFound = false;
-			Channel channelToCheck = null;
-			while (channelIterator.hasNext()) {
-				channelToCheck = channelIterator.next();
-				if (isSameLink(channelToCheck, remote)) {
-					linkFound = true;
-					break;
-				}
+		tasksToExecute.add((s, e) -> {
+			final var message = event.getMessage();
+			final var remote = event.getRemote();
+			if (message == null || message.length == 0) {
+				return prepareResult(false, "The given message is null or empty");
 			}
-			final Channel channelFound;
-			if (!linkFound) {
-				channelFound = null;
+			if (remote == null) {
+				return prepareResult(false, "The given remote is null");
+			}
+			if (channelGroup == null) {
+				return prepareResult(false, "Currently no link is established");
+			}
+			final var channelFound = searchChannel(remote);
+			if (channelFound == null) {
+				return prepareResult(false, "No matching established link is found: " + remote);
+			}
+
+			final var localAddress = (InetSocketAddress) channelFound.localAddress();
+			final var local = new EndPoint(localAddress.getAddress().getHostAddress(), localAddress.getPort());
+			final var writeResult = channelFound.writeAndFlush(Unpooled.wrappedBuffer(message))
+					.awaitUninterruptibly();
+			String log = "";
+			if (writeResult.isSuccess()) {
+				log = "A new outbound message to " + remote + ": " + Hex.encodeHexString(message);
+				emitMessage(Message.Type.OUTBOUND, local, remote, message);
 			} else {
-				channelFound = channelToCheck;
+				log = "Failed to send a message to " + remote + " due to " + writeResult.cause().getLocalizedMessage();
 			}
-			if (channelFound != null) {
-				final InetSocketAddress localAddress = (InetSocketAddress) channelFound.localAddress();
-				final EndPoint local = new EndPoint(localAddress.getAddress().getHostAddress(), localAddress.getPort());
-				channelFound.writeAndFlush(Unpooled.wrappedBuffer(message))
-						.addListener(new ChannelFutureListener() {
-							@Override
-							public void operationComplete(ChannelFuture future) throws Exception {
-								String log = "Successfully sent to " + remote + ":" + ByteBufUtil.hexDump(message);
-								resultSink.tryEmitValue(
-										new RequestResult(AsyncerUtil.generateType1UUID(), State.Event.SEND,
-												Boolean.TRUE, log));
-								emitMessage(Message.Type.OUTBOUND, local, remote, message);
-								emitLog(Level.INFO, log);
-							}
-						});
-			} else {
-				String log = "Failed to send a message as matching link is not found: " + remote;
-				resultSink.tryEmitValue(
-						new RequestResult(AsyncerUtil.generateType1UUID(), State.Event.SEND, Boolean.FALSE, log));
-				emitLog(Level.ERROR, log);
-			}
-		} else {
-			String log = "Failed to send a message as no link is not found: " + remote;
-			resultSink.tryEmitValue(
-					new RequestResult(AsyncerUtil.generateType1UUID(), State.Event.SEND, Boolean.FALSE, log));
-			emitLog(Level.ERROR, log);
-		}
+			return prepareResult(writeResult.isSuccess(), log);
+		});
 
-		return resultSink.asMono();
+		return runTasks(state, event, tasksToExecute);
 
-		return null;
 	}
 
-	private Result<Boolean> runTasks(List<Callable<Result<Boolean>>> tasksToExecute) {
-		TaskExecutor<Boolean> taskExecutor = new SequentialFAETaskExecutorImpl<>();
+	protected Result<Boolean> prepareResult(boolean result, String message) {
+		emitLog(result ? Level.INFO : Level.ERROR, message);
+		return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.valueOf(result), message);
+	}
+
+	private BiFunction<NettyInbound, NettyOutbound, Publisher<Void>> createTcpConnectionHandler() {
+		return (in, out) -> {
+			in.receive().asByteArray().doOnNext(buf -> in.withConnection(connection -> {
+				InetSocketAddress localAddress = (InetSocketAddress) connection.channel().localAddress();
+				EndPoint local = new EndPoint(localAddress.getAddress().getHostAddress(), localAddress.getPort());
+				InetSocketAddress remoteAddress = (InetSocketAddress) connection.channel().remoteAddress();
+				EndPoint remote = new EndPoint(remoteAddress.getAddress().getHostAddress(), remoteAddress.getPort());
+				emitMessage(Message.Type.INBOUND, local, remote, buf);
+				emitLog(Level.INFO, "A new inbound message from " + remote + ": " + Hex.encodeHexString(buf));
+			})).subscribe();
+
+			return out.neverComplete();
+		};
+	}
+
+	private Channel searchChannel(@NonNull EndPoint remote) {
+		Iterator<Channel> channelIterator = channelGroup.iterator();
+		boolean linkFound = false;
+		Channel channelToCheck = null;
+		while (channelIterator.hasNext()) {
+			channelToCheck = channelIterator.next();
+			if (isSameLink(channelToCheck, remote)) {
+				linkFound = true;
+				break;
+			}
+		}
+		final Channel channelFound;
+		if (!linkFound) {
+			channelFound = null;
+		} else {
+			channelFound = channelToCheck;
+		}
+		return channelFound;
+	}
+
+	private Result<Boolean> runTasks(State state, Event<byte[]> event,
+			List<BiFunction<State, Event<byte[]>, Result<Boolean>>> tasksToExecute) {
+		TaskExecutor<State, State.Type, Event<byte[]>, Event.Type, Boolean> taskExecutor = new SequentialFAETaskExecutorImpl<>();
 		try {
-			List<Result<Boolean>> taskResults = taskExecutor.run(tasksToExecute, Duration.ofSeconds(5));
+			List<Result<Boolean>> taskResults = taskExecutor.run(state, event, tasksToExecute, Duration.ofSeconds(5));
 			boolean allSuccessfullyDone = taskResults.stream().allMatch(tr -> tr.getValue().booleanValue())
 					&& taskResults.size() == tasksToExecute.size();
-			String description = taskResults.stream().map(tr -> tr.getDescription()).collect(Collectors.joining(","));
-			return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.valueOf(allSuccessfullyDone),
-					description);
+			String description = taskResults.stream().map(Result::getDescription).collect(Collectors.joining(","));
+			return new Result<>(AsyncerUtil.generateType1UUID(), Boolean.valueOf(allSuccessfullyDone), description);
 		} finally {
 			try {
 				taskExecutor.close();
@@ -270,33 +266,8 @@ public abstract class AbstractTcpFluxer extends AbstractFluxer<byte[]> implement
 
 	private boolean isSameLink(@NonNull Channel channel, @NonNull EndPoint remote) {
 		InetSocketAddress channelRemoteAddress = (InetSocketAddress) channel.remoteAddress();
-		if (remote.getIpAddress().equals(channelRemoteAddress.getAddress().getHostAddress())
-				&& remote.getPort().equals(Integer.valueOf(channelRemoteAddress.getPort()))) {
-			return true;
-		}
-
-		return false;
-	}
-
-	private BiFunction<NettyInbound, NettyOutbound, Publisher<Void>> createHandler() {
-		return new BiFunction<NettyInbound, NettyOutbound, Publisher<Void>>() {
-			@Override
-			public Publisher<Void> apply(NettyInbound in, NettyOutbound out) {
-				in.receive().asByteArray().doOnNext(buf -> {
-					in.withConnection(connection -> {
-						InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
-						InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
-						emitMessage(Message.Type.INBOUND,
-								new EndPoint(local.getAddress().getHostAddress(), local.getPort()),
-								new EndPoint(remote.getAddress().getHostAddress(), remote.getPort()), buf);
-						String log = "A new message is received from " + connection.channel().localAddress().toString();
-						emitLog(Level.INFO, log);
-					});
-				}).subscribe();
-
-				return out.neverComplete();
-			}
-		};
+		return remote.getIpAddress().equals(channelRemoteAddress.getAddress().getHostAddress())
+				&& remote.getPort().equals(Integer.valueOf(channelRemoteAddress.getPort()));
 	}
 
 }

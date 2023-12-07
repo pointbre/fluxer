@@ -3,6 +3,7 @@ package com.github.pointbre.fluxer.core;
 import java.util.List;
 import java.util.UUID;
 
+import org.apache.commons.codec.binary.Hex;
 import org.slf4j.event.Level;
 
 import com.github.pointbre.asyncer.core.Asyncer;
@@ -52,6 +53,10 @@ public interface Fluxer<M> extends AutoCloseable {
 			super(type);
 		}
 
+		@Override
+		public String toString() {
+			return "State [type=" + getType() + "]";
+		}
 	}
 
 	@Value
@@ -78,6 +83,10 @@ public interface Fluxer<M> extends AutoCloseable {
 		@Nullable
 		EndPoint remote;
 
+		@Override
+		public String toString() {
+			return "Event [type=" + getType() + ", message=" + message + ", remote=" + remote + "]";
+		}
 	}
 
 	@Value
@@ -142,6 +151,17 @@ public interface Fluxer<M> extends AutoCloseable {
 			this.local = local;
 			this.remote = remote;
 			this.message = message;
+		}
+
+		@Override
+		public String toString() {
+			final String messageString;
+			if (message instanceof byte[]) {
+				messageString = Hex.encodeHexString((byte[]) message);
+			} else {
+				messageString = message.toString();
+			}
+			return "Message [local=" + local + ", remote=" + remote + ", message=" + messageString + "]";
 		}
 
 	}

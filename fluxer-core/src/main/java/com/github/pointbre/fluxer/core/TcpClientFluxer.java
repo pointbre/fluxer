@@ -5,14 +5,14 @@ import java.time.Duration;
 
 import org.slf4j.event.Level;
 
-import com.github.pointbre.asyncer.core.Asyncer.TaskResult;
-import com.github.pointbre.asyncer.core.AsyncerUtil;
+import com.github.pointbre.asyncer.core.Asyncer.Result;
 
 import io.netty.channel.ChannelOption;
 import reactor.netty.tcp.TcpClient;
 
 public class TcpClientFluxer extends AbstractTcpFluxer implements ClientFluxer<byte[]> {
 
+	// FIXME More optional attributes, for example, keep alive and so on
 	public TcpClientFluxer(String remoteIPAddress, Integer remotePort) throws Exception {
 		super(remoteIPAddress, remotePort);
 	}
@@ -34,7 +34,7 @@ public class TcpClientFluxer extends AbstractTcpFluxer implements ClientFluxer<b
 					channelGroup.add(connection.channel());
 					InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
 					InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
-					emitLink(connection.channel().id().asLongText(), Link.State.CONNECTED,
+					emitLink(Link.Type.CONNECTED, connection.channel().id().asLongText(),
 							new EndPoint(local.getAddress().getHostAddress(), Integer.valueOf(local.getPort())),
 							new EndPoint(remote.getAddress().getHostAddress(), Integer.valueOf(remote.getPort())));
 					emitLog(Level.INFO, "A new connection is established: " + connection.channel());
@@ -42,34 +42,32 @@ public class TcpClientFluxer extends AbstractTcpFluxer implements ClientFluxer<b
 				.doOnDisconnected(connection -> {
 					InetSocketAddress local = (InetSocketAddress) connection.channel().localAddress();
 					InetSocketAddress remote = (InetSocketAddress) connection.channel().remoteAddress();
-					emitLink(connection.channel().id().asLongText(), Link.State.DISCONNECTED,
-							new EndPoint(local.getAddress().getHostAddress(),
-									Integer.valueOf(local.getPort())),
-							new EndPoint(remote.getAddress().getHostAddress(),
-									Integer.valueOf(remote.getPort())));
-					emitLog(Level.INFO, "The existing connection is terminated: " +
-							connection.channel());
+					emitLink(Link.Type.DISCONNECTED, connection.channel().id().asLongText(),
+							new EndPoint(local.getAddress().getHostAddress(), Integer.valueOf(local.getPort())),
+							new EndPoint(remote.getAddress().getHostAddress(), Integer.valueOf(remote.getPort())));
+					emitLog(Level.INFO, "The existing connection is terminated: " + connection.channel());
 				})
 				.observe((tcpConnection, newState) -> {
 				})
-				.handle(handler)
+				.handle(tcpConnectionHandler)
 				.host(getIpAddress())
 				.port(getPort())
 				.wiretap(true)
 				.noSSL();
 
-		Boolean result = null;
-		String description = null;
+		boolean result;
+		String description = "";
 
 		try {
 			disposableChannel = tcpClient.connectNow(Duration.ofSeconds(5));
-			result = Boolean.TRUE;
-			description = "Successfully started at " + getIpAddress() + ":" + getPort();
+			result = true;
+			description = "Successfully started a tcp client at " + getIpAddress() + ":" + getPort();
 		} catch (Exception e) {
-			result = Boolean.FALSE;
-			description = e.getLocalizedMessage();
+			result = false;
+			description = "Failed to start a tcp client at " + getIpAddress() + ":" + getPort() + " due to "
+					+ e.getLocalizedMessage();
 		}
 
-		return new TaskResult<>(AsyncerUtil.generateType1UUID(), result, description);
+		return prepareResult(result, description);
 	}
 }

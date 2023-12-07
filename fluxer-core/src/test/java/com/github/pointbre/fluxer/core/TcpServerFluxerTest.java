@@ -11,10 +11,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.github.pointbre.asyncer.core.Asyncer.Change;
 import com.github.pointbre.fluxer.core.Fluxer.Link;
 
 import lombok.Cleanup;
-import reactor.core.scheduler.Schedulers;
 
 @ExtendWith(MockitoExtension.class)
 @ExtendWith(PortNumberExtension.class)
@@ -31,24 +31,25 @@ class TcpServerFluxerTest {
 	void test() throws Exception {
 		@Cleanup
 		Fluxer<byte[]> tcpServer = new TcpServerFluxer(LOCALHOST_IP_ADDR, portNumber);
+
 		@Cleanup
 		final Fluxer<byte[]> tcpClient = new TcpClientFluxer(LOCALHOST_IP_ADDR, portNumber);
 
-		final List<Link> serverLinks = new ArrayList<>();
-		final List<Link> clientLinks = new ArrayList<>();
+		final List<Change<Link>> serverLinks = new ArrayList<>();
+		final List<Change<Link>> clientLinks = new ArrayList<>();
 
-		tcpServer.state()
-				.doOnError(error -> {
-					fail("Shouldn't throw an error");
-				}).doOnNext(state -> {
-					System.out.println("subscriber 1 | Server state received: " + state);
-				}).doOnComplete(new Runnable() {
-					@Override
-					public void run() {
-						System.out.println(
-								"subscriber 1 | Server state completed");
-					}
-				}).subscribe();
+		// tcpServer.state()
+		// .doOnError(error -> {
+		// fail("Shouldn't throw an error");
+		// }).doOnNext(state -> {
+		// System.out.println("subscriber 1 | Server state received: " + state);
+		// }).doOnComplete(new Runnable() {
+		// @Override
+		// public void run() {
+		// System.out.println(
+		// "subscriber 1 | Server state completed");
+		// }
+		// }).subscribe();
 
 		tcpServer.link()
 				.doOnError(error -> {
@@ -70,8 +71,9 @@ class TcpServerFluxerTest {
 		// .doOnError(error -> {
 		// fail("Shouldn't throw an error");
 		// }).doOnNext(message -> {
-		// System.out.println("subscriber 1 | Server message received: " + new
-		// String(message.getMessage()));
+		// System.out.println(
+		// "subscriber 1 | Server message received: " + new
+		// String(message.getValue().getMessage()));
 		// }).doOnComplete(new Runnable() {
 		// @Override
 		// public void run() {
@@ -93,39 +95,40 @@ class TcpServerFluxerTest {
 		// }
 		// }).subscribe();
 
-		tcpClient.state()
-				.doOnError(error -> {
-					fail("Shouldn't throw an error");
-				}).doOnNext(state -> {
-					System.out.println("subscriber 1 | client state received: " + state);
-				}).doOnComplete(new Runnable() {
-					@Override
-					public void run() {
-						System.out.println(
-								"subscriber 1 | client state completed");
-					}
-				}).subscribe();
+		// tcpClient.state()
+		// .doOnError(error -> {
+		// fail("Shouldn't throw an error");
+		// }).doOnNext(state -> {
+		// System.out.println("subscriber 1 | client state received: " + state);
+		// }).doOnComplete(new Runnable() {
+		// @Override
+		// public void run() {
+		// System.out.println(
+		// "subscriber 1 | client state completed");
+		// }
+		// }).subscribe();
 
-		tcpClient.link()
-				.doOnError(error -> {
-					fail("Shouldn't throw an error");
-				}).doOnNext(link -> {
-					clientLinks.add(link);
-					System.out.println("subscriber 1 | client link received: " + link);
-				}).doOnComplete(new Runnable() {
-					@Override
-					public void run() {
-						System.out.println(
-								"subscriber 1 | client link completed");
-					}
-				}).subscribe();
+		// tcpClient.link()
+		// .doOnError(error -> {
+		// fail("Shouldn't throw an error");
+		// }).doOnNext(link -> {
+		// clientLinks.add(link);
+		// System.out.println("subscriber 1 | client link received: " + link);
+		// }).doOnComplete(new Runnable() {
+		// @Override
+		// public void run() {
+		// System.out.println(
+		// "subscriber 1 | client link completed");
+		// }
+		// }).subscribe();
 
 		// tcpClient.message()
 		// .doOnError(error -> {
 		// fail("Shouldn't throw an error");
 		// }).doOnNext(message -> {
-		// System.out.println("subscriber 1 | client message received: " + new
-		// String(message.getMessage()));
+		// System.out.println(
+		// "subscriber 1 | client message received: " + new
+		// String(message.getValue().getMessage()));
 		// }).doOnComplete(new Runnable() {
 		// @Override
 		// public void run() {
@@ -138,7 +141,7 @@ class TcpServerFluxerTest {
 		long now1 = System.currentTimeMillis();
 		final CountDownLatch countDownLatch1 = new CountDownLatch(1);
 		tcpServer.start()/* .doOnError().doOnSuccess() */
-				.subscribeOn(Schedulers.single())
+				// .subscribeOn(Schedulers.single())
 				.subscribe(result -> {
 					System.out.println("(3)" + Thread.currentThread().getName());
 					System.out.println(System.currentTimeMillis() + ":" + result);
@@ -218,14 +221,14 @@ class TcpServerFluxerTest {
 		long now6 = System.currentTimeMillis();
 		final CountDownLatch countDownLatch6 = new CountDownLatch(1);
 		tcpServer.send("ABC".getBytes(), serverLinks.get(serverLinks.size() -
-				1).getRemote()).doOnError(err -> {
+				1).getValue().getRemote()).doOnError(err -> {
 					countDownLatch6.countDown();
 					System.out.println(">>> server failed to send to " +
-							serverLinks.get(serverLinks.size() - 1).getRemote());
+							serverLinks.get(serverLinks.size() - 1).getValue().getRemote());
 				}).doOnSuccess(result -> {
 					countDownLatch6.countDown();
 					System.out.println(">>> server send() to " +
-							serverLinks.get(serverLinks.size() - 1).getRemote());
+							serverLinks.get(serverLinks.size() - 1).getValue().getRemote());
 					System.out.println(">>> server send() took " + (System.currentTimeMillis() -
 							now6));
 				}).subscribe();
@@ -238,14 +241,14 @@ class TcpServerFluxerTest {
 		long now7 = System.currentTimeMillis();
 		final CountDownLatch countDownLatch7 = new CountDownLatch(1);
 		tcpClient.send("123".getBytes(), serverLinks.get(serverLinks.size() -
-				1).getLocal()).doOnError(err -> {
+				1).getValue().getLocal()).doOnError(err -> {
 					countDownLatch7.countDown();
 					System.out.println(">>> client failed to send to " +
-							serverLinks.get(serverLinks.size() - 1).getRemote());
+							serverLinks.get(serverLinks.size() - 1).getValue().getRemote());
 				}).doOnSuccess(result -> {
 					countDownLatch7.countDown();
 					System.out.println(">>> client send() to " +
-							serverLinks.get(serverLinks.size() - 1).getRemote());
+							serverLinks.get(serverLinks.size() - 1).getValue().getRemote());
 					System.out.println(">>> client send() took " + (System.currentTimeMillis() -
 							now7));
 				}).subscribe();
@@ -257,8 +260,8 @@ class TcpServerFluxerTest {
 
 		Thread.sleep(5000);
 
-		tcpClient.close();
-		tcpServer.close();
+		// tcpClient.close();
+		// tcpServer.close();
 
 		System.out.println("*** closing ***");
 

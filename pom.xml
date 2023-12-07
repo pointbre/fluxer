@@ -33,6 +33,7 @@
 		<spring.shell.version>3.1.4</spring.shell.version>
 		<spring.doc.version>1.7.0</spring.doc.version>
 		<spring-statemachine.version>3.2.1</spring-statemachine.version>
+		<commons-codec.version>1.16.0</commons-codec.version>
 		<lombok.version>1.18.30</lombok.version>
 		<javax.annotation.version>1.3.2</javax.annotation.version>
 		<log4j2.version>2.21.0</log4j2.version>
@@ -85,13 +86,19 @@
 				<scope>test</scope>
 			</dependency>
 
-<!--
+			<!--
 			<dependency>
 				<groupId>com.github.pointbre</groupId>
 				<artifactId>asyncer</artifactId>
 				<version>master-SNAPSHOT</version>
 			</dependency>
 -->
+
+			<dependency>
+				<groupId>commons-codec</groupId>
+				<artifactId>commons-codec</artifactId>
+				<version>${commons-codec.version}</version>
+			</dependency>
 
 			<dependency>
 				<groupId>org.projectlombok</groupId>
