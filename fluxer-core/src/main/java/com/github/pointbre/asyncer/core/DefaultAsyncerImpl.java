@@ -106,11 +106,11 @@ public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> im
 
 				// If being closed now, just return the result now
 				// if (isBeingClosed.get()) {
-				// 	resultSinkOfRequest.tryEmitValue(
-				// 			new TransitionResult<>(uuidOfRequest, Boolean.FALSE,
-				// 					"Being closed now, so not possible to process the event: " + eventOfRequest,
-				// 					eventOfRequest, null, null, null));
-				// 	continue;
+				// resultSinkOfRequest.tryEmitValue(
+				// new TransitionResult<>(uuidOfRequest, Boolean.FALSE,
+				// "Being closed now, so not possible to process the event: " + eventOfRequest,
+				// eventOfRequest, null, null, null));
+				// continue;
 				// }
 
 				System.out.println("Running");
@@ -149,13 +149,19 @@ public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> im
 
 		final One<TransitionResult<S, T, E, F, Boolean>> resultSink = Sinks.one();
 
-		try {
-			requests.put(new Request<>(uuid, event, resultSink));
-		} catch (InterruptedException e) {
+		if (isBeingClosed.get()) {
 			TransitionResult<S, T, E, F, Boolean> transitionResult = new TransitionResult<>(uuid, Boolean.FALSE,
-					"Failed to fire the event: " + event, event, null, null, null);
+					"Failed to fire the event as Asyncer is being closed: " + event, event, null, null, null);
 			resultSink.tryEmitValue(transitionResult);
-			transitionResultSink.tryEmitNext(transitionResult);
+		} else {
+			try {
+				requests.put(new Request<>(uuid, event, resultSink));
+			} catch (InterruptedException e) {
+				TransitionResult<S, T, E, F, Boolean> transitionResult = new TransitionResult<>(uuid, Boolean.FALSE,
+						"Failed to fire the event: " + event, event, null, null, null);
+				resultSink.tryEmitValue(transitionResult);
+				transitionResultSink.tryEmitNext(transitionResult);
+			}
 		}
 
 		return resultSink.asMono();
@@ -181,8 +187,11 @@ public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> im
 	public void close() throws Exception {
 		System.out.println("Asyncer's close() called");
 
-		// Only the first execution is processed as we need to wait until all of requests are processed
+		// Only the first execution is processed as we need to wait until all of
+		// requests are processed
 		if (!isBeingClosed.get()) {
+			isBeingClosed.set(true);
+
 			stateSink.tryEmitComplete();
 			transitionResultSink.tryEmitComplete();
 
@@ -191,7 +200,6 @@ public class DefaultAsyncerImpl<S extends State<T>, T, E extends Event<F>, F> im
 			try {
 				System.out.println("Putting poison pill");
 				requests.put(POISON_PILL);
-				isBeingClosed.set(true);
 				System.out.println("Waiting until the poison pill is taken");
 				System.out.println("");
 				while (!requests.isEmpty()) {
